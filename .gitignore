@@ -4,6 +4,34 @@ models
 outputs
 crops
 data
+
+# The players are minors: no photos, video or names ever go to GitHub.
+# Images and video, wherever they are
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.heic
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+# Player names (copy roster.example.json to roster.json and fill it in)
+roster.json
+
+# Model weights and bulky data
+*.pt
+*.pth
+*.onnx
+*.npy
+*.npz
+*.zip
+
 # Python
 .venv/
 __pycache__/

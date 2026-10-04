@@ -1,0 +1,4 @@
+{
+  "home": {"name": "Home", "players": {"5": "Player name"}},
+  "away": {"name": "Away", "players": {}}
+}

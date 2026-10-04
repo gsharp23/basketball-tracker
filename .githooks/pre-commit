@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuses a commit that contains photos, video, model files, player names or any binary file.
+# The players in the footage are minors, so none of that may ever reach GitHub.
+pattern='\.(jpe?g|png|gif|bmp|webp|tiff?|heic|mp4|mov|avi|mkv|webm|pt|pth|onnx|npy|npz|zip)$|^(clips|models|outputs|crops|data)(/|$)|^roster\.json$'
+by_name=$(git diff --cached --name-only --diff-filter=ACMR | grep -iE "$pattern")
+# numstat prints "-  -" for binary files, whatever they are called
+by_content=$(git diff --cached --numstat --diff-filter=ACMR | awk '$1 == "-" && $2 == "-" {print $3}')
+blocked=$(printf '%s\n%s\n' "$by_name" "$by_content" | sed '/^$/d' | sort -u)
+if [ -n "$blocked" ]; then
+    echo "COMMIT BLOCKED: these files must not go into git (photos, video, models or player names):"
+    echo "$blocked" | sed 's/^/    /'
+    echo "Unstage them with:  git restore --staged <file>"
+    exit 1
+fi
