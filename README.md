@@ -75,13 +75,21 @@ wide-angle footage. It takes 20 frames from the test clip, runs
 | Top candidate was something else | 10 of 20 | 12 of 20 |
 | Nothing reported | 7 of 20 | 5 of 20 |
 
+The same test on the dedicated `ball_detector_model`:
+
+| `ball_detector_model` | Normal (640) | High (1280) |
+|---|---|---|
+| Top candidate really was the ball | 2 of 20 frames | 2 of 20 frames |
+| Top candidate was something else | 16 of 20 | 14 of 20 |
+| Nothing reported | 2 of 20 | 4 of 20 |
+
 Findings:
 
 - Higher resolution did not help. The ball was found only when it was large
   and in the open (a dribble, or the referee holding it).
-- Most false detections were players' elbows and forearms, some at 0.70-0.78
-  confidence, so a confidence threshold cannot separate them from the real ball.
-- Conclusion: this model cannot be relied on for the ball in this footage.
+- Most false detections were players' elbows, forearms and lower legs, some at
+  0.70-0.89 confidence, so a confidence threshold cannot separate them from the real ball.
+- Conclusion: neither model can be relied on for the ball in this footage.
   The likely fix is fine-tuning on labelled frames from the team's own games.
 
 ---
