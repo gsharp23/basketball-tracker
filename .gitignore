@@ -1,0 +1,10 @@
+# Large files live on the SD card (/mnt/d/hoops-tracker); these are links to it
+clips
+models
+outputs
+crops
+data
+# Python
+.venv/
+__pycache__/
+*.pyc
