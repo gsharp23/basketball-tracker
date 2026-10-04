@@ -61,11 +61,28 @@ The basketball-trained weights come from the MIT-licensed
 project. They were trained on NBA broadcast footage, not gym footage. Both files
 were checked with `picklescan` before being loaded.
 
-### 3. Ball detection experiment (in progress)
+### 3. Ball detection experiment
 
 `experiments/ball_resolution_test.py` tests whether looking at the frame at
 higher resolution helps find the ball, which is only a few pixels wide in
-wide-angle footage.
+wide-angle footage. It takes 20 frames from the test clip, runs
+`player_detector` at 640 and 1280 pixels, and saves a close-up of each top
+"ball" candidate so every one can be checked by eye.
+
+| `player_detector` | Normal (640) | High (1280) |
+|---|---|---|
+| Top candidate really was the ball | 3 of 20 frames | 3 of 20 frames |
+| Top candidate was something else | 10 of 20 | 12 of 20 |
+| Nothing reported | 7 of 20 | 5 of 20 |
+
+Findings:
+
+- Higher resolution did not help. The ball was found only when it was large
+  and in the open (a dribble, or the referee holding it).
+- Most false detections were players' elbows and forearms, some at 0.70-0.78
+  confidence, so a confidence threshold cannot separate them from the real ball.
+- Conclusion: this model cannot be relied on for the ball in this footage.
+  The likely fix is fine-tuning on labelled frames from the team's own games.
 
 ---
 
