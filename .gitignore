@@ -24,6 +24,20 @@ data
 # Player names (copy roster.example.json to roster.json and fill it in)
 roster.json
 
+# Results and anything the tools leave behind (they belong on the SD card)
+*.csv
+tracks.json
+teams.json
+jerseys.json
+positions.json
+stats.json
+hoops.json
+court_*.json
+.gradio/
+flagged/
+gradio_cached_examples/
+.ipynb_checkpoints/
+
 # Model weights and bulky data
 *.pt
 *.pth
