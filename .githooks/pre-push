@@ -1,25 +1,28 @@
 #!/bin/sh
-# Refuses a push if ANY commit being pushed ever contained photos, video, model files, result
-# files or player names. Deleting a file in a later commit does not remove it from history,
-# so the whole history is checked.
-pattern='\.(jpe?g|png|gif|bmp|webp|tiff?|heic|mp4|mov|avi|mkv|webm|pt|pth|onnx|npy|npz|zip|csv)$|^(clips|models|outputs|crops|data)(/|$)'
+# Refuses a push unless EVERY file in EVERY commit being pushed is a kind that belongs in git.
+# Deleting a file in a later commit does not remove it from history, so the whole history is checked.
+allowed='(\.py|\.md)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
+linked='^(clips|models|outputs|crops|data)(/|$)'
+blank_rosters=" 4873f6ce476a0dfe9485be0e550e79005a73f837 "
+empty_file=e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 zero=0000000000000000000000000000000000000000
 status=0
 while read local_ref local_sha remote_ref remote_sha; do
     [ "$local_sha" = "$zero" ] && continue
-    names=$(git log --name-only --format= "$local_sha" | sed '/^$/d' | sort -u)
-    by_name=$(echo "$names" | grep -iE "$pattern")
-    # The blank roster template is the only JSON allowed. roster.json is checked just below.
-    by_json=$(echo "$names" | grep -iE '\.json$' | grep -vxF -e 'roster.example.json' -e 'roster.json')
-    # a roster with real names in it (the empty placeholder from the first commit is harmless)
-    roster=$(git log --format=%H "$local_sha" -- roster.json | while read -r c; do
-        [ -n "$(git show "$c:roster.json" 2>/dev/null | tr -d ' \n\t')" ] && echo "roster.json (commit $c)"; done)
-    by_content=$(git log --numstat --format= "$local_sha" | awk '$1 == "-" && $2 == "-" {print $3}' | sort -u)
-    # notebooks that were ever committed with pictures in their outputs
-    by_notebook=$(git log --format=%H "$local_sha" -- '*.ipynb' | while read -r c; do
-        git diff-tree --no-commit-id --name-only -r --diff-filter=ACMR "$c" -- '*.ipynb' | while read -r f; do
-            git show "$c:$f" 2>/dev/null | grep -q '"image/' && echo "$f (notebook with pictures, commit $c)"; done; done)
-    blocked=$(printf '%s\n%s\n%s\n%s\n%s\n' "$by_name" "$by_json" "$roster" "$by_content" "$by_notebook" | sed '/^$/d' | sort -u)
+    # every file version reachable from the pushed commit, as "<hash> <path>" (this also sees merges)
+    blocked=$(git rev-list --objects "$local_sha" | git cat-file --batch-check='%(objecttype) %(objectname) %(rest)' | sed -n 's/^blob //p' | while read -r sha path; do
+        case "$path" in
+            roster.json)            # the empty placeholder from the first commit is harmless
+                [ "$sha" = "$empty_file" ] || echo "roster.json (it has content)" ;;
+            roster.example.json)
+                case "$blank_rosters" in *" $sha "*) ;; *) echo "roster.example.json (not the blank template)";; esac ;;
+            *.ipynb)
+                git cat-file -p "$sha" | grep -q '"image/' && echo "$path (notebook with pictures in its outputs)" ;;
+            *)
+                if ! echo "$path" | grep -qE "$allowed" || echo "$path" | grep -qE "$linked"; then echo "$path"; fi ;;
+        esac
+    done; git -c core.quotePath=false log -m --numstat --format= "$local_sha" | awk -F'\t' '$1 == "-" && $2 == "-" {print $3 " (binary)"}')
+    blocked=$(echo "$blocked" | sed '/^$/d' | sort -u)
     if [ -n "$blocked" ]; then
         echo "PUSH BLOCKED: the history of $local_ref contains files that must not go to GitHub:"
         echo "$blocked" | sed 's/^/    /'

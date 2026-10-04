@@ -1,17 +1,27 @@
 #!/bin/sh
-# Refuses a commit that contains photos, video, model files, result files, player names or
-# any binary file. The players in the footage are minors, so none of that may ever reach GitHub.
-pattern='\.(jpe?g|png|gif|bmp|webp|tiff?|heic|mp4|mov|avi|mkv|webm|pt|pth|onnx|npy|npz|zip|csv)$|^(clips|models|outputs|crops|data)(/|$)'
-staged=$(git diff --cached --name-only --diff-filter=ACMR)
-by_name=$(echo "$staged" | grep -iE "$pattern")
-# Results and rosters are JSON files; the blank roster template is the only JSON allowed in git.
-by_json=$(echo "$staged" | grep -iE '\.json$' | grep -vxF 'roster.example.json')
+# Refuses a commit unless every file in it is a kind that belongs in git: Python code, Markdown,
+# requirements.txt, .gitignore, these two guard scripts and the BLANK roster template.
+# The players in the footage are minors, so photos, video, results and names must never reach GitHub.
+allowed='(\.py|\.md)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
+linked='^(clips|models|outputs|crops|data)(/|$)'
+# git hash of the blank roster.example.json. Add a hash here only if the blank template itself changes.
+blank_rosters=" 4873f6ce476a0dfe9485be0e550e79005a73f837 "
+
+staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR | sed '/^$/d')
+[ -z "$staged" ] && exit 0
+by_name=$(echo "$staged" | grep -vE "$allowed")
+by_folder=$(echo "$staged" | grep -E "$linked")
 # numstat prints "-  -" for binary files, whatever they are called
-by_content=$(git diff --cached --numstat --diff-filter=ACMR | awk '$1 == "-" && $2 == "-" {print $3}')
+by_content=$(git -c core.quotePath=false diff --cached --numstat --diff-filter=ACMR | awk -F'\t' '$1 == "-" && $2 == "-" {print $3}')
+# The template must stay blank: real names go in roster.json, which git ignores.
+by_roster=""
+if echo "$staged" | grep -qxF 'roster.example.json'; then
+    case "$blank_rosters" in *" $(git rev-parse :roster.example.json) "*) ;; *) by_roster="roster.example.json  (the template has been edited: put real names in roster.json instead)";; esac
+fi
 # A notebook saved with its outputs can carry pictures inside it.
-by_notebook=$(echo "$staged" | grep -iE '\.ipynb$' | while read -r f; do
+by_notebook=$(echo "$staged" | grep -E '\.ipynb$' | while read -r f; do
     git show ":$f" | grep -q '"image/' && echo "$f  (notebook with pictures in its outputs: clear the outputs first)"; done)
-blocked=$(printf '%s\n%s\n%s\n%s\n' "$by_name" "$by_json" "$by_content" "$by_notebook" | sed '/^$/d' | sort -u)
+blocked=$(printf '%s\n%s\n%s\n%s\n%s\n' "$by_name" "$by_folder" "$by_content" "$by_roster" "$by_notebook" | sed '/^$/d' | sort -u)
 if [ -n "$blocked" ]; then
     echo "COMMIT BLOCKED: these files must not go into git (photos, video, models, results or player names):"
     echo "$blocked" | sed 's/^/    /'

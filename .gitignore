@@ -1,52 +1,25 @@
-# Large files live on the SD card (/mnt/d/hoops-tracker); these are links to it
+# The players in the footage are minors: no photos, video, results or names ever go to GitHub.
+# So this file works as an allow-list: everything is ignored unless it is listed below.
+*
+
+# Folders are looked into, but only the file types below are picked up from them.
+!*/
+
+# What belongs in git
+!*.py
+!*.md
+!requirements.txt
+!.gitignore
+!.githooks/pre-commit
+!.githooks/pre-push
+!roster.example.json
+
+# Never, even though they would match a rule above
+.venv/
+__pycache__/
+# Links to the SD card (/mnt/d/hoops-tracker): videos, models, outputs, crops, data
 clips
 models
 outputs
 crops
 data
-
-# The players are minors: no photos, video or names ever go to GitHub.
-# Images and video, wherever they are
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.webp
-*.tif
-*.tiff
-*.heic
-*.mp4
-*.mov
-*.avi
-*.mkv
-*.webm
-# Player names (copy roster.example.json to roster.json and fill it in)
-roster.json
-
-# Results and anything the tools leave behind (they belong on the SD card)
-*.csv
-tracks.json
-teams.json
-jerseys.json
-positions.json
-stats.json
-hoops.json
-court_*.json
-.gradio/
-flagged/
-gradio_cached_examples/
-.ipynb_checkpoints/
-
-# Model weights and bulky data
-*.pt
-*.pth
-*.onnx
-*.npy
-*.npz
-*.zip
-
-# Python
-.venv/
-__pycache__/
-*.pyc
