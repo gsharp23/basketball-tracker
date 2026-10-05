@@ -16,8 +16,8 @@ while read local_ref local_sha remote_ref remote_sha; do
                 [ "$sha" = "$empty_file" ] || echo "roster.json (it has content)" ;;
             roster.example.json)
                 case "$blank_rosters" in *" $sha "*) ;; *) echo "roster.example.json (not the blank template)";; esac ;;
-            *.ipynb)
-                git cat-file -p "$sha" | grep -q '"image/' && echo "$path (notebook with pictures in its outputs)" ;;
+            *.ipynb)        # accepted only with every cell's outputs and attachments empty
+                git cat-file -p "$sha" | python3 -c "import json,sys; nb=json.load(sys.stdin); sys.exit(1 if any(c.get('outputs') or c.get('attachments') for c in nb.get('cells', [])) else 0)" 2>/dev/null || echo "$path (notebook with saved outputs)" ;;
             *)
                 if ! echo "$path" | grep -qE "$allowed" || echo "$path" | grep -qE "$linked"; then echo "$path"; fi ;;
         esac

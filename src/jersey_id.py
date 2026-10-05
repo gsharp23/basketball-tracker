@@ -427,8 +427,7 @@ def run(video=config.DEFAULT_VIDEO, save_crops=True, resume=False):
     on_roster = roster_numbers()
     crops_folder = None
     if save_crops:
-        crops_folder = config.CROPS_DIR / config.video_stem(video)
-        crops_folder.mkdir(parents=True, exist_ok=True)
+        crops_folder = config.crops_dir(video)
         if not done:
             # Starting from scratch: clear out the pictures of an earlier run. After a new
             # detection the same ID number is a different player.

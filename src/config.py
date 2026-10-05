@@ -111,6 +111,11 @@ def data_dir(video):
     return card_folder(DATA_DIR, video)
 
 
+def crops_dir(video):
+    """Folder for this video's jersey check pictures (crops/<stem>/). Created if missing."""
+    return card_folder(CROPS_DIR, video)
+
+
 def output_dir(video):
     """Folder for this video's output videos and pictures (outputs/<stem>/). Created if missing."""
     return card_folder(OUTPUTS_DIR, video)

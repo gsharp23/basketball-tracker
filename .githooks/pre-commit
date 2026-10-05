@@ -18,9 +18,10 @@ by_roster=""
 if echo "$staged" | grep -qxF 'roster.example.json'; then
     case "$blank_rosters" in *" $(git rev-parse :roster.example.json) "*) ;; *) by_roster="roster.example.json  (the template has been edited: put real names in roster.json instead)";; esac
 fi
-# A notebook saved with its outputs can carry pictures inside it.
+# A notebook saved with its outputs can carry pictures, video or printed names inside it,
+# so a notebook is accepted only when every cell's outputs and attachments are empty.
 by_notebook=$(echo "$staged" | grep -E '\.ipynb$' | while read -r f; do
-    git show ":$f" | grep -q '"image/' && echo "$f  (notebook with pictures in its outputs: clear the outputs first)"; done)
+    git show ":$f" | python3 -c "import json,sys; nb=json.load(sys.stdin); sys.exit(1 if any(c.get('outputs') or c.get('attachments') for c in nb.get('cells', [])) else 0)" 2>/dev/null || echo "$f  (notebook with saved outputs: clear all outputs first)"; done)
 blocked=$(printf '%s\n%s\n%s\n%s\n%s\n' "$by_name" "$by_folder" "$by_content" "$by_roster" "$by_notebook" | sed '/^$/d' | sort -u)
 if [ -n "$blocked" ]; then
     echo "COMMIT BLOCKED: these files must not go into git (photos, video, models, results or player names):"

@@ -317,10 +317,10 @@ def solve_court(setup, landmarks, length, width):
         seen_x.extend(seen[:, 0])
     if min(seen_x) < court[:, 0].min() - 20:
         warnings.append("The LEFT end of the court is in the video but has no landmarks. Positions there can be "
-                        "2 to 4 ft off. Click at least 4 landmarks at the left end.")
+                        "2 to 5.5 ft off. Click at least 4 landmarks at the left end.")
     if max(seen_x) > court[:, 0].max() + 20:
         warnings.append("The RIGHT end of the court is in the video but has no landmarks. Positions there can be "
-                        "2 to 4 ft off. Click at least 4 landmarks at the right end.")
+                        "2 to 5.5 ft off. Click at least 4 landmarks at the right end.")
     rms = float(np.sqrt((errors ** 2).mean()))
     if rms > POOR_FIT_FT:
         warnings.append(f"The landmarks fit the court only roughly (typical error {rms:.2f} ft; a good set is under "

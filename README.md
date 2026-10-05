@@ -44,13 +44,15 @@ flowchart TD
     end
 
     roster[roster.json<br/>number to name, local only] --> stats
+    roster --> jerseys
     detect --> v1[tracked.mp4]
     tactical --> v2[tactical.mp4]
     stats --> out[stats.csv, stats.json, heat maps]
 ```
 
-The video, every result and the roster stay on the local SD card. Only the
-code and this description are in git.
+The video and every result stay on the local SD card. `roster.json` stays in
+the project folder on this computer and is ignored by git. Only the code and
+this description are in git.
 
 ---
 
@@ -180,7 +182,10 @@ name for each team. `roster.json` is ignored by git, so names never leave
 this computer; everything works without the file. The stats show a name only
 for a player whose team and number were read, and only when the numbers read
 fit one roster team clearly better than the other (the roster does not say
-which jersey colour a team wears).
+which jersey colour a team wears). Jersey reading uses the roster too: when
+both teams are filled in, a number that is on neither counts as half a vote.
+After filling in the roster, run `main.py` with `--from jerseys` for that to
+take effect.
 
 ---
 
@@ -287,14 +292,14 @@ play and repeat the by-eye checks on it.
 - **Unidentified time.** 15% of the time players were seen on the test clip
   belongs to IDs with no number, and is not credited to any player. One real
   player can be hit hard: one player there was on camera for about 16 seconds
-  under four tracking IDs, and the two IDs that got his number cover only 7
+  under four tracking IDs, and the two IDs that got that number cover only 7
   of them. The longest unidentified IDs are named under the stats table so
   they can be looked up in `tactical.mp4`.
 - **Court mapping.** The landmark clicks for the test clip are stand-ins made
   from measured line crossings, not clicked by a person, and clicking in a real
   browser has not been tried yet. A landmark clicked about 3 ft off was not
   flagged in a test, so the green overlay is the real check. Marking only one
-  end of the court left the other end 3.6 to 5.5 ft off.
+  end of the court left the other end 2 to 5.5 ft off, depending on the test.
 - **Positions.** A position is the bottom-centre of the player's box. When
   the legs are hidden behind another player, the dot is typically 4 to 8 ft
   off in depth. Players nearest the camera often have their feet below the
@@ -474,8 +479,8 @@ names may reach GitHub.
 - `.gitignore` is an allow-list: everything is ignored except Python code,
   Markdown, `requirements.txt`, the guard scripts and the blank roster template.
 - `.githooks/pre-commit` refuses a commit that contains anything else, any
-  binary file, a roster template with names typed into it, or a notebook saved
-  with pictures in its outputs.
+  binary file, a roster template with names typed into it, or a notebook that
+  still has any saved output.
 - `.githooks/pre-push` checks every file in the whole history being pushed in
   the same way, because deleting a file later does not remove it from history.
 - The guards were tested against 14 ways a picture, a result file or a name
@@ -533,8 +538,11 @@ for name in clips models data outputs crops; do
     mkdir -p /mnt/d/hoops-tracker/$name
     ln -s /mnt/d/hoops-tracker/$name $name
 done
-git config core.hooksPath .githooks
+cp .githooks/pre-commit .githooks/pre-push .git/hooks/
 ```
+
+The guards are copied into `.git/hooks` so they keep working whichever
+version of the project is checked out. Copy them again if they are changed.
 
 Without the links the programs stop with a message; they never create these
 folders inside the project.

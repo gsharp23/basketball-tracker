@@ -64,7 +64,7 @@ MEAN_REACH = 1
 # taken in another player standing in front, and its position is dropped.
 # Test clip: 25 of 930 boxes were over 1.2. Of 7 looked at, 5 had taken in a second
 # player, 1 was not a player and 1 was a normal box. For one player who stood still
-# behind a team-mate this took 15 ft of movement that never happened off his 42 ft.
+# behind a team-mate this took 15 ft of movement that never happened off a 42 ft total.
 TOO_TALL = 1.2
 HEIGHT_REACH = 15
 
