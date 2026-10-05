@@ -13,6 +13,8 @@
 !.githooks/pre-commit
 !.githooks/pre-push
 !roster.example.json
+# Notebooks: the commit guard refuses one that still has any saved output
+!*.ipynb
 
 # Never, even though they would match a rule above
 .venv/

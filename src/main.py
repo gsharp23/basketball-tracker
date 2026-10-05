@@ -299,7 +299,7 @@ def print_summary(video, seconds):
                ("Top-down court view (video)", out / "tactical.mp4"),
                ("Stats table (opens in Excel)", data / "stats.csv"),
                ("Stats with every detail", data / "stats.json")]
-    results += [("Heat map", path) for path in sorted(out.glob("heatmap_*.png"))]
+    results += [("Position map", path) for path in sorted(out.glob("position_map_*.png"))]
     results += [("Check by eye: the two teams", out / "teams_sheet.jpg"),
                 ("Check by eye: the court lines", out / "court_check.jpg"),
                 ("Check by eye: the jersey readings (folder)", config.CROPS_DIR / config.video_stem(video))]

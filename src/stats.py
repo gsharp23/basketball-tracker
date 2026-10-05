@@ -25,7 +25,7 @@ What it does
        share of the on-map time in each third of the court and in the paint.
     3. Per team: spacing, the average distance between its players on the map, for the
        whole video and minute by minute (the minute-by-minute list is in stats.json).
-    4. Writes data/<video>/stats.json and stats.csv, one heat map per team in
+    4. Writes data/<video>/stats.json and stats.csv, one position map per team in
        outputs/<video>/, and prints a table. Names come from roster.json when filled in.
 """
 import argparse
@@ -50,8 +50,8 @@ MAX_SPEED_FT_S = 25.0
 # further apart than this in the same frame, one of them probably has a wrong number.
 # (Two boxes on the same player were measured 1 to 3 ft apart.)
 SAME_PLAYER_FT = 6.0
-# Size of one square of the heat map, in feet.
-HEAT_CELL_FT = 2
+# Size of one square of the position map, in feet.
+MAP_CELL_FT = 2
 
 CSV_COLUMNS = ["team", "number", "name", "seen_s", "on_map_s", "distance_ft", "avg_speed_ft_s",
                "avg_x_ft", "avg_y_ft", "left_third_pct", "middle_third_pct", "right_third_pct",
@@ -61,7 +61,7 @@ CSV_COLUMNS = ["team", "number", "name", "seen_s", "on_map_s", "distance_ft", "a
 def parse_args():
     parser = argparse.ArgumentParser(description="Per-player and per-team stats from the tracking data.")
     parser.add_argument("--video", default=config.DEFAULT_VIDEO, help="video file (default clips/test.mp4)")
-    parser.add_argument("--no-heatmaps", action="store_true", help="do not save the heat map pictures")
+    parser.add_argument("--no-position-maps", action="store_true", help="do not save the position map pictures")
     return parser.parse_args()
 
 
@@ -354,7 +354,7 @@ def csv_text(result):
     return out.getvalue()
 
 
-def save_heatmap(path, label, team_spots, court, look_seconds):
+def save_position_map(path, label, team_spots, court, look_seconds):
     """One picture: where on the court a team's players were seen, darker = more time."""
     import matplotlib
     matplotlib.use("Agg")           # draw straight into a file; no window is opened
@@ -366,7 +366,7 @@ def save_heatmap(path, label, team_spots, court, look_seconds):
     # Positions up to 3 ft outside the lines are kept by tactical_view.py; count them in the edge squares.
     xs = np.clip([x for x, _ in team_spots], 0, length)
     ys = np.clip([y for _, y in team_spots], 0, width)
-    squares, _, _ = np.histogram2d(xs, ys, bins=[int(length // HEAT_CELL_FT), int(width // HEAT_CELL_FT)],
+    squares, _, _ = np.histogram2d(xs, ys, bins=[int(length // MAP_CELL_FT), int(width // MAP_CELL_FT)],
                                    range=[[0, length], [0, width]])
     seconds = squares.T * look_seconds
     seconds[seconds == 0] = np.nan          # squares nobody was seen in stay blank
@@ -395,7 +395,7 @@ def save_heatmap(path, label, team_spots, court, look_seconds):
                        f"{len(team_spots) * look_seconds:.0f} player-seconds in all.",
               transform=axes.transAxes, color=soft, fontsize=9)
     bar = figure.colorbar(image, ax=axes, shrink=0.8, pad=0.02)
-    bar.set_label(f"seconds in each {HEAT_CELL_FT} x {HEAT_CELL_FT} ft square, all the team's players added up", color=soft)
+    bar.set_label(f"seconds in each {MAP_CELL_FT} x {MAP_CELL_FT} ft square, all the team's players added up", color=soft)
     bar.ax.tick_params(colors=soft, labelsize=9)
     bar.outline.set_visible(False)
     figure.tight_layout()
@@ -478,7 +478,7 @@ def print_table(result):
         print(f"  NOTE: {warning}")
 
 
-def run(video=config.DEFAULT_VIDEO, heatmaps=True, show_table=True):
+def run(video=config.DEFAULT_VIDEO, position_maps=True, show_table=True):
     """Do the whole step for one video. Returns the stats (as in stats.json)."""
     tracks, teams, jerseys, positions = load_inputs(video)
     result, team_spots = build_stats(video, tracks, teams, jerseys, positions, load_roster())
@@ -501,16 +501,16 @@ def run(video=config.DEFAULT_VIDEO, heatmaps=True, show_table=True):
     print()
     print(f"Wrote {folder / 'stats.json'}")
     print(f"Wrote {folder / 'stats.csv'}   (opens in Excel)")
-    if heatmaps:
+    if position_maps:
         court = (positions["court"]["length_ft"], positions["court"]["width_ft"])
         for team in result["teams"]:
             if team_spots[team["team_index"]]:
-                path = config.output_dir(video) / f"heatmap_{team['team'].replace(' ', '_')}.png"
-                save_heatmap(path, team["team"], team_spots[team["team_index"]], court, result["seconds_per_look"])
+                path = config.output_dir(video) / f"position_map_{team['team'].replace(' ', '_')}.png"
+                save_position_map(path, team["team"], team_spots[team["team_index"]], court, result["seconds_per_look"])
                 print(f"Wrote {path}")
     return result
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run(args.video, heatmaps=not args.no_heatmaps)
+    run(args.video, position_maps=not args.no_position_maps)
