@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="start-page waiting" id="start-page">
+  <div class="stripe"></div>
+  <div class="stripe-thin"></div>
+
+  <header class="start-header">
+    <div class="logo-plate" id="logo-plate">
+      <div class="plate-logo" id="plate-logo">LOGO</div>
+      <div class="plate-name" id="plate-name">Hoops Tracker</div>
+    </div>
+    <a href="settings.html" class="settings-link" aria-label="Settings">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+    </a>
+  </header>
+
+  <main class="start-main">
+    <div class="hero placeholder" id="hero">
+      <!-- A plain basketball, drawn here, until the branding folder supplies the artwork. -->
+      <svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="basketball">
+        <circle cx="100" cy="100" r="92" fill="#d81e27" stroke="#ffffff" stroke-width="6"></circle>
+        <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+          <path d="M100 8 V192"></path><path d="M8 100 H192"></path>
+          <path d="M36 34 C78 70 78 130 36 166"></path><path d="M164 34 C122 70 122 130 164 166"></path>
+        </g>
+      </svg>
+    </div>
+    <div class="hero-text">
+      <h1 class="mascot" id="mascot">Hoops Tracker</h1>
+      <div class="school-line" id="school-line">Game video in, coaching numbers out</div>
+    </div>
+
+    <div class="choices">
+      <a href="games.html" class="choice">
+        <div class="choice-head">
+          <div class="choice-title">VIEW THE STATS</div>
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#d81e27" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+        </div>
+        <div class="choice-text">Games, video, player numbers and where the points came from.</div>
+      </a>
+      <a href="train.html" class="choice">
+        <div class="choice-head">
+          <div class="choice-title">TRAIN THE MODEL</div>
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#d81e27" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+        </div>
+        <div class="choice-text">Show the tool where the ball is, so it learns to find it.</div>
+      </a>
+    </div>
+  </main>
+
+  <footer class="start-footer">
+    <div id="storage-line"><span class="dot dot-grey"></span>Checking the data folder...</div>
+    <div>Runs on this laptop only</div>
+  </footer>
+</div>
+<script src="app.js"></script>
+<script src="index.js"></script>
+</body>
+</html>

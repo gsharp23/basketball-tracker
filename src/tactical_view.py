@@ -512,13 +512,13 @@ def render(video, positions):
         if written == 0:
             problem = f"No frame of {source} could be read."
         elif not close_video_writer(writer):
-            problem = "ffmpeg could not write the video (is the SD card full or unplugged?)."
+            problem = "ffmpeg could not write the video (is the disk full?)."
         elif count_frames(unfinished) != written:
-            problem = "The video did not read back whole. The SD card may be failing."
+            problem = "The video did not read back whole. The disk may be failing."
     except KeyboardInterrupt:
         problem = "Stopped by Ctrl+C before the video was finished."
     except BrokenPipeError:
-        problem = "ffmpeg stopped while writing the video (is the SD card full or unplugged?)."
+        problem = "ffmpeg stopped while writing the video (is the disk full?)."
     capture.release()
     if problem:
         close_video_writer(writer)

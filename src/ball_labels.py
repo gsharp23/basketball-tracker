@@ -8,7 +8,7 @@ the parts that need no browser:
     2. keep what the coach answered for each frame             (labels.json)
     3. pack the answered frames into a zip for training        (export_dataset)
 
-The clicking itself is on the dashboard's "Train the model" page (dash_train.py). The
+The clicking itself is on the dashboard's "Train the model" screen (web/train.html through api_train.py). The
 training is done on Google Colab with colab/train_ball_model.ipynb.
 
 From the command line (the dashboard does the same things with buttons):
@@ -17,7 +17,7 @@ From the command line (the dashboard does the same things with buttons):
     python src/ball_labels.py test-game game3        (or: test-game none)
     python src/ball_labels.py export
 
-What it writes, all on the SD card under data/_training/
+What it writes, all in the data folder under data/_training/
     frames/<game>/<game>_<frame number>.jpg     the frames that were picked, full size
     labels.json                                 the coach's answers (below)
     labels_previous.json                        the answers as they were one save earlier
@@ -38,7 +38,7 @@ The zip (the standard Ultralytics YOLO detection layout)
     labels/train|val|test/       one text file per picture: "0 cx cy w h" as shares of the
                                  picture's width and height; an empty file means "no ball"
 
-Privacy: the frames show the players. They stay on the SD card. Only the coach decides
+Privacy: the frames show the players. They stay on this laptop. Only the coach decides
 whether a zip is uploaded anywhere.
 """
 import argparse
@@ -83,7 +83,7 @@ MIN_FRAMES_TO_EXPORT = 10
 # ---------------------------------------------------------------- folders and files
 
 def training_dir():
-    """data/_training/, created if missing. Raises ValueError with a plain message if the SD card is not attached."""
+    """data/_training/, created if missing. Raises ValueError with a plain message if the data folder cannot be reached."""
     if not TRAINING_DIR.parent.is_dir():
         raise ValueError(f"Cannot reach the folder {TRAINING_DIR.parent}\n{config.SD_CARD_HELP}")
     TRAINING_DIR.mkdir(exist_ok=True)
@@ -216,7 +216,7 @@ def save_picture(path, picture):
     cv2.imwrite(str(path), picture, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     back = cv2.imread(str(path))
     if back is None or back.shape != picture.shape:
-        raise IOError(f"{path} did not read back correctly. The SD card may be failing; try again.")
+        raise IOError(f"{path} did not read back correctly. The disk may be failing; try again.")
 
 
 def pick_frames(video, how_many=DEFAULT_FRAMES):
@@ -233,14 +233,14 @@ def pick_frames(video, how_many=DEFAULT_FRAMES):
     """
     path = config.video_path(video)
     if not path.is_file():
-        raise ValueError(f"Cannot find the video {path}. Is the SD card attached?")
+        raise ValueError(f"Cannot find the video {path}. Is it still in the clips folder?")
     stem = config.video_stem(video)
     capture = cv2.VideoCapture(str(path))
     try:
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
         if frame_count <= 0:
-            raise ValueError(f"The video {path} cannot be read. Copy it to the SD card again.")
+            raise ValueError(f"The video {path} cannot be read. Copy it to the clips folder again.")
         already = [frame for frame, _ in frame_files(stem)]
         numbers = choose_frame_numbers(frame_count, fps, int(how_many), already, seed=stem)
         folder = training_dir() / "frames" / stem
@@ -452,7 +452,7 @@ def export_dataset():
         with zipfile.ZipFile(temp) as archive:
             if archive.testzip() is not None:
                 raise IOError(f"{path.name} did not read back correctly, so it was not kept. "
-                              "The SD card may be failing; try again.")
+                              "The disk may be failing; try again.")
         os.replace(temp, path)
     finally:
         temp.unlink(missing_ok=True)        # left over only when the zip failed or the work was broken off

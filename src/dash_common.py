@@ -1,40 +1,43 @@
-"""Helpers shared by the dashboard (dashboard.py) and its pages (dash_stats.py,
-dash_shots.py, dash_train.py).
+"""Helpers shared by the dashboard (dashboard.py) and its API modules (dash_api.py, api_*.py).
 
-A page module starts with
-    import dash_common
-    from dash_common import gr          # Gradio, with the settings below already in place
+Nothing in here knows about web pages or Gradio: it is plain functions over the files
+in the data folders and the programs that run in the background.
 
 What is in here
-    gr                          Gradio itself: import it from here, never with "import gradio"
     DASH_DIR, work_dir(name)    data/_dashboard/ and a named working folder inside it
-    SERVED_DIRS, NOT_SERVED     the SD-card folders the browser may be shown files from, and the one kept back
-    sd_card_ok()                are the linked SD-card folders reachable?
+    SERVED_DIRS                 the folders the browser may be shown files from (see dashboard.py)
+    sd_card_ok()                are the five linked data folders reachable?
 
     load_branding()             school name, mascot, logo and artwork from the branding folder
+    save_branding(changes)      change the names in branding.json
     brand_colours(logo)         the logo's main colours, for theming
-    make_theme(), make_css(colours), picture_data(path), logo_data(path)     the look of the pages
-    note(text), warning(text)   small boxes of plain text for a gr.HTML
-    CSS class "hoops-big"       for large buttons: gr.Button("...", variant="primary", elem_classes="hoops-big")
+    text_on(colour)             white or black, whichever reads on that colour
 
     video_files(), list_games() the videos in clips/, and the status of each stage for each
+    video_seconds(path)         how long a video is
     stand_in_court(video)       was this game's court marked with stand-in clicks, not by the coach?
-    game_choices(), chosen_game(), remember_game(video)       the "Game" box at the top of a page
+    chosen_game(), remember_game(video)       the game the coach is working on
 
-    start_job(name, command)    run a long command in the background
-    follow_job(name)            its printed lines, as they come, for live progress
-    job_running(name), job_exit_code(name), stop_job(name), stop_all_jobs()
+    load_settings(), save_settings(changes)   data/_dashboard/settings.json
+    load_roster(), save_roster(roster)        roster.json at the project root (never leaves the laptop)
+    storage_info()              are the data folders in place, where, and how full is the drive
+
+    JOB_KINDS, start_job(kind, video, options)   run a long program in the background
+    job_info(name)              what it is doing now: lines, progress, the address of a click page
+    job_running(name), stop_job(name), stop_all_jobs()
     running_videos(), is_running(video), what_is_running()    is another run going?
 
-Privacy: the school's name, logo and colours are read from the branding folder on the
-SD card while the program runs. They must never be written into this code.
+Privacy: the school's name, logo and colours are read from the branding folder in the
+data folder while the program runs. They must never be written into this code.
 """
-import base64
-import html
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -47,33 +50,34 @@ import main         # for its own "is this stage done" checks; importing it runs
 
 # The dashboard's own working folders. A folder in data/ whose name starts with "_" is not a game.
 DASH_DIR = config.DATA_DIR / "_dashboard"
+BRANDING_DIR = Path(os.environ.get("HOOPS_BRANDING_DIR") or DASH_DIR / "branding")
 
-# Gradio reads these two settings while it is being imported, so they are set first.
-# No usage reports are sent, and the pictures it keeps for the browser go to the SD card,
-# not to C: (the pictures show children, and C: is nearly full).
-os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-if config.DATA_DIR.is_dir():
-    (DASH_DIR / "tmp").mkdir(parents=True, exist_ok=True)
-    os.environ["GRADIO_TEMP_DIR"] = str((DASH_DIR / "tmp").resolve())
-import gradio as gr  # noqa: E402  (must come after the settings above)
-
-# The browser may only be shown files from these two folders: the result videos and check
-# pictures (outputs/) and the game videos (clips/). Pictures a page draws itself go through
-# Gradio's own temp folder, which is always allowed. Nothing in data/, crops/ or models/ is served.
-SERVED_DIRS = [config.OUTPUTS_DIR, config.CLIPS_DIR]
-# Kept back inside outputs/: the dashboard's own folder (test pictures of the pages are kept there,
-# and no page shows them). It is named both through the project's link and as it is on the SD
-# card, so that either address is refused. The list is kept this short on purpose: Gradio checks
-# every file it sends against each entry, and each check costs time on the SD card.
-NOT_SERVED = [config.OUTPUTS_DIR / "_dashboard", (config.OUTPUTS_DIR / "_dashboard").resolve()]
+# The browser may be shown files from these folders only, under /files/<name>/... (see dashboard.py).
+SERVED_DIRS = {"outputs": config.OUTPUTS_DIR, "crops": config.CROPS_DIR, "clips": config.CLIPS_DIR,
+               "data": config.DATA_DIR, "branding": BRANDING_DIR}
 
 VIDEO_TYPES = (".mp4", ".mov", ".m4v", ".avi", ".mkv")
 
+# Court sizes the coach can choose from, in feet.
+COURT_SIZES = {"high_school": ("High school", 84, 50), "junior_high": ("Junior high", 74, 42),
+               "college": ("College", 94, 50)}
+
+DEFAULT_SETTINGS = {
+    "court_size": "high_school",        # a key of COURT_SIZES
+    "run_where": "laptop",              # "laptop" or "colab" (Colab is coming next)
+    "make_videos": True,                # make the videos with player boxes and the court view
+    "drive_folder": "Hoops Tracker",    # Google Drive, coming next
+    "drive_delete_after": True,
+}
+
 
 def sd_card_ok():
-    """True when all five linked SD-card folders can be reached."""
+    """True when all five linked data folders (clips, models, data, outputs, crops) can be reached."""
     folders = [config.CLIPS_DIR, config.MODELS_DIR, config.DATA_DIR, config.OUTPUTS_DIR, config.CROPS_DIR]
-    return all(folder.is_dir() for folder in folders)
+    try:
+        return all(folder.is_dir() for folder in folders)
+    except OSError:                # a damaged disk: treat it as not reachable
+        return False
 
 
 def work_dir(name):
@@ -83,33 +87,50 @@ def work_dir(name):
     return folder
 
 
+def read_json(path, default=None):
+    """A JSON file's contents, or `default` when it is missing or damaged. Never stops the program."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
 # ---------------------------------------------------------------- branding
 
 # Used when there is no branding folder, or no logo in it.
-NEUTRAL_COLOURS = {"main": "#1c2530", "accent": "#e8590c", "plate": "#ffffff"}
+NEUTRAL_COLOURS = {"main": "#141112", "accent": "#d81e27", "plate": "#e9e6e2"}
 
 
-def load_branding(folder=None):
+def load_branding():
     """What the branding folder says about the school. Never fails.
 
     Returns {"school_name": text, "mascot": text, "logo": Path or None, "hero": Path or None}.
     Anything missing or unreadable comes back empty, and the pages then show a neutral title.
-    The folder is data/_dashboard/branding/ unless another one is given here or in the
-    environment variable HOOPS_BRANDING_DIR (used for testing).
     """
-    folder = Path(folder or os.environ.get("HOOPS_BRANDING_DIR") or DASH_DIR / "branding")
-    try:
-        with open(folder / "branding.json", "r", encoding="utf-8") as f:
-            said = json.load(f)
-    except (OSError, ValueError):
-        said = {}
+    said = read_json(BRANDING_DIR / "branding.json", {})
     if not isinstance(said, dict):
         said = {}
     brand = {"school_name": str(said.get("school_name") or ""), "mascot": str(said.get("mascot") or "")}
     for key, usual_name in (("logo", "logo.png"), ("hero", "hero.svg")):
-        path = folder / str(said.get(key) or usual_name)
-        brand[key] = path if path.is_file() else None
+        path = BRANDING_DIR / str(said.get(key) or usual_name)
+        try:
+            brand[key] = path if path.is_file() else None
+        except OSError:            # a damaged disk answers "Invalid argument" instead of "no such file"
+            brand[key] = None
     return brand
+
+
+def save_branding(changes):
+    """Change the school name and mascot in branding.json (the picture names are kept)."""
+    said = read_json(BRANDING_DIR / "branding.json", {})
+    if not isinstance(said, dict):
+        said = {}
+    for key in ("school_name", "mascot"):
+        if key in changes:
+            said[key] = str(changes[key]).strip()
+    BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+    config.save_json(BRANDING_DIR / "branding.json", said, indent=2)
 
 
 def hex_colour(bgr):
@@ -121,9 +142,9 @@ def hex_colour(bgr):
 def brand_colours(logo_path):
     """The logo's main colours, read from the picture, for theming the pages.
 
-    Returns {"main": a dark colour for the title bands, "accent": the strongest bright
-    colour for buttons, "plate": the logo's own background, to put behind it}, each as
-    "#rrggbb". Falls back to NEUTRAL_COLOURS for whatever cannot be found.
+    Returns {"main": a dark colour, "accent": the strongest bright colour, "plate": the
+    logo's own background}, each as "#rrggbb". Falls back to NEUTRAL_COLOURS for whatever
+    cannot be found.
     """
     colours = dict(NEUTRAL_COLOURS)
     picture = cv2.imread(str(logo_path), cv2.IMREAD_UNCHANGED) if logo_path else None
@@ -152,7 +173,6 @@ def brand_colours(logo_path):
     strength = groups.max(axis=1) - groups.min(axis=1)       # 0 for grey, large for a pure colour
 
     def group_mean(index):
-        """The real average colour of the pixels in one group."""
         return ink[(ink // 32 == groups[index] // 32).all(axis=1)].mean(axis=0)
 
     enough = counts >= 0.01 * len(ink)                       # ignore the thin blended edges
@@ -161,13 +181,12 @@ def brand_colours(logo_path):
     strong = [i for i in range(len(groups)) if enough[i] and strength[i] >= 96 and brightness[i] >= 120]
     bright_colour = group_mean(strong[0]) if strong else None
     if dark_colour is None and bright_colour is not None:
-        dark_colour = bright_colour * 0.3                    # no dark colour in the logo: a dark shade of its colour
+        dark_colour = bright_colour * 0.3
     if dark_colour is not None:
         colours["main"] = hex_colour(dark_colour)
     if bright_colour is not None:
         colours["accent"] = hex_colour(bright_colour)
     elif dark_colour is not None and dark_colour.max() - dark_colour.min() >= 60:
-        # a logo in one dark colour: a lighter shade of it
         colours["accent"] = hex_colour(np.minimum(dark_colour * 1.8 + 40, 255))
     return colours
 
@@ -178,216 +197,25 @@ def text_on(colour):
     return "#111111" if 0.299 * red + 0.587 * green + 0.114 * blue > 150 else "#ffffff"
 
 
-def picture_data(path):
-    """A small picture file as text that can be written straight into the page's HTML.
-
-    That way the logo and artwork need no file address, and nothing else is served.
-    """
-    kinds = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}
-    kind = kinds.get(Path(path).suffix.lower(), "image/png")
-    with open(path, "rb") as f:
-        return f"data:{kind};base64," + base64.b64encode(f.read()).decode("ascii")
-
-
-def logo_data(path):
-    """The logo for the page (like picture_data), with its empty border cut off.
-
-    A logo file often has a wide plain margin, which would make the logo itself tiny on
-    the page. What counts as "drawn on" is anything unlike the top-left corner, or
-    anything solid when that corner is see-through.
-    """
-    picture = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if picture is None or picture.ndim != 3:
-        return picture_data(path)
-    if picture.shape[2] == 4 and picture[0, 0, 3] < 128:
-        drawn = picture[:, :, 3] >= 128
-    else:
-        drawn = np.abs(picture[:, :, :3].astype(int) - picture[0, 0, :3].astype(int)).sum(axis=2) > 60
-    rows, columns = np.nonzero(drawn)
-    if len(rows) == 0:
-        return picture_data(path)
-    margin = (rows.max() - rows.min()) // 8 + 2         # a little air around it
-    trimmed = picture[max(rows.min() - margin, 0):rows.max() + margin + 1,
-                      max(columns.min() - margin, 0):columns.max() + margin + 1]
-    ok, png = cv2.imencode(".png", trimmed)
-    return "data:image/png;base64," + base64.b64encode(png.tobytes()).decode("ascii") if ok else picture_data(path)
-
-
-# ---------------------------------------------------------------- the look of the pages
-
-def make_theme():
-    """The Gradio theme: plain system fonts, and the same look in light and dark mode."""
-    # The default theme would make the browser fetch fonts from Google; these are on the laptop.
-    theme = gr.themes.Default(font=["Segoe UI", "Arial", "sans-serif"], font_mono=["Consolas", "monospace"])
-    # Gradio switches to dark colours when Windows is in dark mode. The pages are designed
-    # around the logo's colours, so every "dark" setting is given its light value.
-    dark_names = [name for name in dir(theme) if name.endswith("_dark") and not name.startswith("_")]
-    return theme.set(**{name: getattr(theme, name[:-len("_dark")]) for name in dark_names})
-
-
-# All the dashboard's own styling, in one place. MAIN, ACCENT, ON_ACCENT and PLATE are
-# replaced with the logo's colours by make_css(). Class names start with "hoops-".
-CSS = """
-:root, .dark {
-    --hoops-main: MAIN; --hoops-accent: ACCENT; --hoops-on-accent: ON_ACCENT; --hoops-plate: PLATE;
-    --hoops-sporty: Impact, "Arial Narrow Bold", "Franklin Gothic Bold", "Arial Black", sans-serif;
-}
-/* Gradio's own colours for buttons, ticks and the chosen tab follow the logo too. */
-.gradio-container {
-    --button-primary-background-fill: var(--hoops-accent);
-    --button-primary-background-fill-hover: var(--hoops-main);
-    --button-primary-text-color: var(--hoops-on-accent);
-    --button-primary-text-color-hover: #ffffff;
-    --button-primary-border-color: var(--hoops-accent);
-    --color-accent: var(--hoops-accent);
-    --checkbox-background-color-selected: var(--hoops-accent);
-    --checkbox-border-color-selected: var(--hoops-accent);
-    --slider-color: var(--hoops-accent);
-    --loader-color: var(--hoops-accent);
-    --body-text-size: 16px;
-    padding: 0 !important; max-width: none !important; background: #f2f3f5 !important;
-}
-/* Gradio's own menu of pages. (gr.Navbar(visible=False) does not hide it in Gradio 6.29.) */
-.nav-holder { display: none !important; }
-.gradio-container .main, .gradio-container .wrap, .gradio-container main.contain { padding: 0 !important; }
-.gradio-container main.contain > .column { gap: 0 !important; }
-.gradio-container .html-container { padding: 0 !important; }      /* our own HTML sets its own spacing */
-
-/* ---- the start page ---- */
-.gradio-container:has(.hoops-landing) { background: var(--hoops-main) !important; }
-.hoops-landing {
-    position: relative; overflow: clip; color: #ffffff; text-align: center;
-    padding: 28px 32px 64px 32px; min-height: 100vh; box-sizing: border-box;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    /* a soft light behind the artwork, so it does not float on a flat colour */
-    background: radial-gradient(ellipse 55% 42% at 50% 34%, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 72%);
-}
-/* two slanted stripes in the accent colour behind everything */
-.hoops-landing::before, .hoops-landing::after {
-    content: ""; position: absolute; top: -20%; height: 140%; transform: skewX(-18deg); z-index: 0;
-}
-.hoops-landing::before { left: 9%; width: 54px; background: var(--hoops-accent); opacity: 0.95; }
-.hoops-landing::after { left: calc(9% + 74px); width: 14px; background: #ffffff; opacity: 0.85; }
-.hoops-landing > * { position: relative; z-index: 1; }
-.hoops-logo-plate {
-    display: inline-block; background: var(--hoops-plate); border-radius: 12px; padding: 6px 12px; line-height: 0;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-}
-.hoops-landing .hoops-logo-corner { position: absolute; top: 22px; right: 28px; padding: 4px 6px; }
-.hoops-landing .hoops-logo-corner img { height: 72px; }
-.hoops-landing .hoops-logo-centre img { height: 150px; max-width: 80vw; }
-.hoops-hero { height: 37vh; min-height: 200px; max-width: 80vw; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45)); }
-.hoops-landing h1 {
-    font-family: var(--hoops-sporty); font-style: italic; font-weight: 900; text-transform: uppercase;
-    font-size: clamp(44px, 6.5vw, 92px); line-height: 0.95; letter-spacing: 1px; margin: 18px 0 6px 0;
-    color: #ffffff !important; text-shadow: 4px 4px 0 var(--hoops-accent);
-}
-.hoops-landing .hoops-under-title {
-    font-size: 20px; letter-spacing: 4px; text-transform: uppercase; font-weight: 600; margin: 0 0 30px 0;
-    color: #ffffff !important; opacity: 0.9;
-}
-.hoops-choices { display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; width: 100%; }
-a.hoops-choice {
-    display: block; width: min(420px, 90vw); padding: 26px 30px 24px 30px; text-align: left; text-decoration: none;
-    background: #ffffff; color: #111111 !important; border-radius: 14px; border-bottom: 8px solid var(--hoops-accent);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); transition: transform 0.12s, background 0.12s;
-}
-a.hoops-choice:hover, a.hoops-choice:focus {
-    transform: translateY(-4px); background: var(--hoops-accent); color: var(--hoops-on-accent) !important;
-}
-a.hoops-choice .hoops-choice-title {
-    font-family: var(--hoops-sporty); font-style: italic; text-transform: uppercase; font-size: 38px; line-height: 1.05;
-    display: flex; justify-content: space-between; align-items: center;
-}
-a.hoops-choice .hoops-choice-title::after {      /* the arrow */
-    content: "\\2192"; font-style: normal; font-family: Arial, sans-serif; color: var(--hoops-accent);
-}
-a.hoops-choice:hover .hoops-choice-title::after, a.hoops-choice:focus .hoops-choice-title::after {
-    color: var(--hoops-on-accent);
-}
-a.hoops-choice .hoops-choice-text { font-size: 17px; margin-top: 8px; opacity: 0.85; }
-
-/* ---- the top of an area page ---- */
-.hoops-band {
-    background: var(--hoops-main); padding: 14px 32px; display: flex; align-items: center; gap: 20px;
-    border-bottom: 6px solid var(--hoops-accent);
-}
-.hoops-band img { height: 56px; }
-.hoops-band .hoops-logo-plate { padding: 2px 4px; border-radius: 8px; box-shadow: none; }
-.hoops-band .hoops-band-title {
-    font-family: var(--hoops-sporty); font-style: italic; text-transform: uppercase; font-size: 34px; line-height: 1; flex: 1;
-    color: #ffffff !important;
-}
-.hoops-band .hoops-band-small {
-    font-family: "Segoe UI", Arial, sans-serif; font-style: normal; font-weight: 600; font-size: 14px; letter-spacing: 2px;
-    color: #ffffff !important; opacity: 0.85; display: block; margin-bottom: 5px;
-}
-a.hoops-back {
-    color: #ffffff !important; text-decoration: none !important; font-size: 18px; font-weight: 600; white-space: nowrap;
-    border: 2px solid #ffffff; border-radius: 10px; padding: 10px 18px;
-}
-a.hoops-back:hover, a.hoops-back:focus { background: #ffffff; color: var(--hoops-main) !important; }
-.hoops-body { padding: 18px 32px 8px 32px !important; max-width: 1400px; margin: 0 auto !important; gap: 14px !important; }
-.form:has(> .hoops-game) { max-width: 520px; }
-.hoops-body .tab-container button { font-size: 18px !important; font-weight: 600; padding: 12px 18px !important; }
-/* Gradio's small grey labels carry real instructions here, so they are larger and darker. */
-.hoops-body span[data-testid="block-info"], .hoops-body label[data-testid="block-label"] {
-    font-size: 16px !important; color: #111111 !important; font-weight: 600;
-}
-.hoops-body input, .hoops-body textarea, .hoops-body label > span { font-size: 16px !important; }
-.hoops-game input { font-size: 19px !important; font-weight: 700 !important; }
-/* Gradio hides a video's play button and time bar until the mouse is over it; here they always show. */
-#hoops-shots-video .controls { opacity: 1 !important; }
-
-/* ---- pieces the pages use ---- */
-.hoops-big { min-height: 64px !important; font-size: 21px !important; font-weight: 700 !important; }
-/* tables in the ordinary font, not the typewriter one Gradio uses for them */
-.table-wrap th, .table-wrap td, .table-wrap .virtual-row { font-family: var(--font) !important; font-size: 16px !important; }
-.hoops-note, .hoops-warning { border-radius: 10px; padding: 14px 18px; font-size: 17px; line-height: 1.45; color: #111111; }
-.hoops-note { background: #ffffff; border-left: 8px solid var(--hoops-main); }
-.hoops-warning { background: #fff4d6; border-left: 8px solid #d98a00; }
-.hoops-footer { text-align: center; font-size: 15px; color: #444444 !important; padding: 14px 32px 20px 32px; }
-.hoops-footer b.hoops-good { color: #1b7a34 !important; }
-.hoops-footer b.hoops-bad { color: #b3261e !important; }
-/* on the start page the footer lies over the bottom of the dark picture */
-.column:has(.hoops-landing) .hoops-footer {
-    position: fixed; left: 0; right: 0; bottom: 0; color: #ffffff !important; z-index: 2;
-}
-.column:has(.hoops-landing) .hoops-footer b.hoops-good { color: #7be495 !important; }
-.column:has(.hoops-landing) .hoops-footer b.hoops-bad { color: #ffb4a8 !important; }
-
-/* ---- the "SD card not found" page ---- */
-.hoops-problem {
-    max-width: 820px; margin: 8vh auto; background: #ffffff; border-radius: 14px; padding: 30px 38px;
-    font-size: 18px; line-height: 1.5; color: #111111; border-top: 10px solid #d98a00;
-}
-.hoops-problem h1 { font-size: 34px; margin: 0 0 12px 0; color: #111111; }
-.hoops-problem code {
-    display: block; background: #1c2530; color: #ffffff; padding: 14px 18px; border-radius: 8px; font-size: 18px; margin: 10px 0;
-}
-"""
-
-
-def make_css(colours):
-    """The dashboard's CSS with the given colours (from brand_colours) filled in."""
-    css = CSS
-    for word, value in (("ON_ACCENT", text_on(colours["accent"])), ("MAIN", colours["main"]),
-                        ("ACCENT", colours["accent"]), ("PLATE", colours["plate"])):
-        css = css.replace(word, value)
-    return css
-
-
-def note(text):
-    """HTML for a plain box of guidance, for a gr.HTML. The text is shown as written, line by line."""
-    return '<div class="hoops-note">' + html.escape(text).replace("\n", "<br>") + "</div>"
-
-
-def warning(text):
-    """HTML for a yellow warning box, for a gr.HTML."""
-    return '<div class="hoops-warning">' + html.escape(text).replace("\n", "<br>") + "</div>"
-
-
 # ---------------------------------------------------------------- the games
+
+def is_clip_video(video):
+    """True when `video` names a video file inside the clips folder itself ("clips/test.mp4").
+
+    The real path of the folder is resolved, so "clips/../something" does not pass. The file
+    itself may be a link to a video kept elsewhere on the laptop (clips/game1.mp4 -> the
+    Downloads folder). Every API that takes a video from the browser checks with this before
+    touching the file or its data folder.
+    """
+    if not video or not isinstance(video, str):
+        return False
+    path = config.video_path(video)
+    try:
+        return (path.suffix.lower() in VIDEO_TYPES and path.is_file()
+                and path.parent.resolve() == config.CLIPS_DIR.resolve())
+    except OSError:
+        return False
+
 
 def video_files():
     """The video files in clips/, in name order (an empty list if the folder cannot be reached)."""
@@ -395,6 +223,37 @@ def video_files():
         return []
     return sorted((path for path in config.CLIPS_DIR.iterdir()
                    if path.suffix.lower() in VIDEO_TYPES and path.is_file()), key=lambda path: path.name.lower())
+
+
+_lengths = None     # "<file> <time> <size>" -> seconds of video; kept in data/_dashboard/video_lengths.json
+                    # so a full game's file (slow to open) is opened once, not at every start
+
+
+def video_seconds(path):
+    """How long a video is, in seconds (None if it cannot be read). Only the file's header is read."""
+    global _lengths
+    path = Path(path)
+    try:
+        key = f"{path} {path.stat().st_mtime} {path.stat().st_size}"
+    except OSError:
+        return None
+    if _lengths is None:
+        saved = read_json(DASH_DIR / "video_lengths.json", {})
+        _lengths = saved if isinstance(saved, dict) else {}
+    if key not in _lengths:
+        video = cv2.VideoCapture(str(path))
+        fps, frames = video.get(cv2.CAP_PROP_FPS), video.get(cv2.CAP_PROP_FRAME_COUNT)
+        video.release()
+        # A header read that broke off (a slow card) gives 0 or 1 frames: that is not remembered, so it is read again.
+        if not (fps and fps > 0 and frames and frames > 1):
+            return None
+        _lengths[key] = frames / fps
+        try:
+            DASH_DIR.mkdir(exist_ok=True)
+            config.save_json(DASH_DIR / "video_lengths.json", _lengths, indent=1)
+        except (OSError, SystemExit):
+            pass            # worth remembering, not worth stopping for
+    return _lengths[key]
 
 
 _status_cache = {}      # video -> (what its files looked like, the stage statuses worked out from them)
@@ -416,7 +275,7 @@ def files_fingerprint(video):
 
 
 def stage_statuses(video):
-    """{"detect": "done" | "half" | "todo", ...} for one video, as main.py itself judges it.
+    """{"detect": "done" | "half" | "todo" | "unknown", ...} for one video, as main.py itself judges it.
 
     main.py has to read a game's big result files to be sure, so the answer is kept until
     one of the game's files changes. A video nothing has been run on has no data folder
@@ -429,10 +288,35 @@ def stage_statuses(video):
         try:
             stages = {stage: main.stage_status(video, stage) for stage in main.STAGES}
         except (SystemExit, OSError, KeyError, TypeError):
-            # a damaged or half-written result file: the stage has to be looked at again
-            stages = {stage: "unknown" for stage in main.STAGES}
+            stages = {stage: "unknown" for stage in main.STAGES}      # a damaged or half-written result file
         _status_cache[video] = (fingerprint, stages)
     return dict(_status_cache[video][1])
+
+
+def stand_in_court(video):
+    """True when this game's court landmarks are stand-in clicks, not the coach's own.
+
+    select_court_keypoints.py writes "provisional" into court_calibration.json for such
+    clicks. Every position worked out from them is provisional too, and the pages say so.
+    """
+    saved = read_json(config.DATA_DIR / config.video_stem(video) / "court_calibration.json", {})
+    return bool(isinstance(saved, dict) and saved.get("provisional"))
+
+
+def shots_count(stem):
+    """How many shots the coach has tagged for this game, and the points they add up to."""
+    saved = read_json(config.DATA_DIR / stem / "shots.json", {})
+    shots = saved.get("shots", []) if isinstance(saved, dict) else []
+    points = sum(int(shot.get("worth") or 0) for shot in shots if shot.get("made"))
+    return len(shots), points
+
+
+def players_count(stem):
+    """How many players with a jersey number the stats found for this game (None before the stats stage)."""
+    saved = read_json(config.DATA_DIR / stem / "stats.json")
+    if not isinstance(saved, dict) or "players" not in saved:
+        return None
+    return sum(1 for player in saved["players"] if player.get("identified"))
 
 
 def list_games():
@@ -441,20 +325,25 @@ def list_games():
     Each game is a dict:
         "video"         "clips/game1.mp4"   (what main.py --video and the click pages take)
         "name"          "game1"             (also the name of its folders in data/ and outputs/)
+        "seconds"       how long the video is (None if it cannot be read)
         "running"       True while main.py or one of the long stages is working on it
         "court_marked"  True when the reference pictures and the landmarks are both saved
-        "stages"        {"detect": "done" | "half" | "todo" | "unknown", ...}; None while running,
-                        because its files are changing then
-        "status"        one of "not started", "running", "needs the court marked",
-                        "stopped part-way", "finished"
+        "stand_in_court" True when the landmarks are stand-in clicks: positions are provisional
+        "stages"        {"detect": "done" | "half" | "todo" | "unknown", ...}; None while running
+        "status"        "not started", "running", "needs the court marked", "stopped part-way", "finished"
+        "shots", "points"  what the coach has tagged so far
+        "players"       players with a number found by the stats (None before then)
+        "roster_newer"  True when roster.json changed after the stats were made: "Carry on" only redoes the stats
     """
     games = []
     busy = running_videos()
     for path in video_files():
         video = f"clips/{path.name}"
-        game = {"video": video, "name": path.stem, "running": path.stem in busy, "stages": None}
+        game = {"video": video, "name": path.stem, "seconds": video_seconds(path),
+                "running": path.stem in busy, "stages": None}
         has_folder = (config.DATA_DIR / path.stem).is_dir()
         game["court_marked"] = has_folder and not court_mapper.setup_missing(video)
+        game["stand_in_court"] = has_folder and stand_in_court(video)
         if game["running"]:
             game["status"] = "running"
         else:
@@ -468,30 +357,17 @@ def list_games():
                 game["status"] = "needs the court marked"
             else:
                 game["status"] = "stopped part-way"
+        game["shots"], game["points"] = shots_count(path.stem)
+        game["players"] = players_count(path.stem)
+        game["roster_newer"] = roster_newer_than_stats(path.stem)
         games.append(game)
     return games
 
 
-def stand_in_court(video):
-    """True when this game's court landmarks are stand-in clicks, not the coach's own.
-
-    select_court_keypoints.py writes "provisional" into court_calibration.json for such
-    clicks. Every position worked out from them is provisional too, and the pages say so.
-    """
-    try:
-        with open(config.DATA_DIR / config.video_stem(video) / "court_calibration.json", "r", encoding="utf-8") as f:
-            return bool(json.load(f).get("provisional"))
-    except (OSError, ValueError, AttributeError):
-        return False
-
-
 def chosen_game():
     """The video the coach chose last ("clips/game1.mp4"), or None. Kept in data/_dashboard/chosen_game.json."""
-    try:
-        with open(DASH_DIR / "chosen_game.json", "r", encoding="utf-8") as f:
-            video = json.load(f).get("video")
-    except (OSError, ValueError, AttributeError):
-        return None
+    saved = read_json(DASH_DIR / "chosen_game.json", {})
+    video = saved.get("video") if isinstance(saved, dict) else None
     return video if isinstance(video, str) and config.video_path(video).is_file() else None
 
 
@@ -502,51 +378,170 @@ def remember_game(video):
         config.save_json(DASH_DIR / "chosen_game.json", {"video": video}, indent=2)
 
 
-def game_choices():
-    """Fill the "Game" box: every video in clips/, with the one chosen last selected.
+# ---------------------------------------------------------------- settings, roster, storage
 
-    Returns a gr.Dropdown update. Its choices are ("game1", "clips/game1.mp4") pairs: the
-    coach sees the short name, the pages get the video as main.py wants it.
+def load_settings():
+    """The coach's settings, with a default for anything not saved yet."""
+    saved = read_json(DASH_DIR / "settings.json", {})
+    settings = dict(DEFAULT_SETTINGS)
+    if isinstance(saved, dict):
+        settings.update({key: saved[key] for key in DEFAULT_SETTINGS if key in saved})
+    if settings["court_size"] not in COURT_SIZES:
+        settings["court_size"] = DEFAULT_SETTINGS["court_size"]
+    return settings
+
+
+def save_settings(changes):
+    """Save the given settings (only the known keys) and return all of them."""
+    settings = load_settings()
+    for key in DEFAULT_SETTINGS:
+        if key in changes:
+            settings[key] = changes[key]
+    if settings["court_size"] not in COURT_SIZES:
+        raise ValueError("That court size is not one of the choices.")
+    if settings["run_where"] not in ("laptop", "colab"):
+        raise ValueError("\"Run new games on\" must be the laptop or Colab.")
+    settings["make_videos"] = bool(settings["make_videos"])
+    settings["drive_delete_after"] = bool(settings["drive_delete_after"])
+    settings["drive_folder"] = str(settings["drive_folder"]).strip() or DEFAULT_SETTINGS["drive_folder"]
+    DASH_DIR.mkdir(exist_ok=True)
+    config.save_json(DASH_DIR / "settings.json", settings, indent=2)
+    return settings
+
+
+EMPTY_ROSTER = {"home": {"name": "Home", "players": {}}, "away": {"name": "Away", "players": {}}}
+
+
+def load_roster():
+    """roster.json as {"home": {"name", "players": {number: name}}, "away": {...}}, blank if missing."""
+    saved = read_json(config.ROSTER_PATH, {})
+    roster = json.loads(json.dumps(EMPTY_ROSTER))
+    for side in ("home", "away"):
+        team = saved.get(side) if isinstance(saved, dict) else None
+        if isinstance(team, dict):
+            roster[side]["name"] = str(team.get("name") or roster[side]["name"])
+            players = team.get("players")
+            if isinstance(players, dict):
+                roster[side]["players"] = {str(number): str(name) for number, name in players.items()}
+    return roster
+
+
+def save_roster(roster):
+    """Check and save a roster of the same shape as load_roster() gives. Raises ValueError with a plain message."""
+    clean = json.loads(json.dumps(EMPTY_ROSTER))
+    for side in ("home", "away"):
+        team = roster.get(side) if isinstance(roster, dict) else None
+        if not isinstance(team, dict):
+            raise ValueError(f"The {side} team is missing.")
+        clean[side]["name"] = str(team.get("name") or "").strip() or clean[side]["name"]
+        for number, name in (team.get("players") or {}).items():
+            number, name = str(number).strip(), str(name).strip()
+            if not number:
+                continue
+            if not number.isdigit() or len(number) > 3:
+                raise ValueError(f"\"{number}\" is not a jersey number (use the digits only, like 12).")
+            if number in clean[side]["players"]:
+                raise ValueError(f"Number {number} is listed twice for the {clean[side]['name']} team.")
+            clean[side]["players"][number] = name
+    # An unchanged roster is not written again: the stats stage is made from roster.json, so a newer
+    # file would make every finished game ask for its stats to be done again.
+    if read_json(config.ROSTER_PATH) != clean:
+        config.save_json(config.ROSTER_PATH, clean, indent=2)
+    return clean
+
+
+def roster_newer_than_stats(stem):
+    """True when roster.json was changed after this game's stats were made (so only the stats step wants doing again)."""
+    stats_file = config.DATA_DIR / stem / "stats.json"
+    try:
+        return config.ROSTER_PATH.stat().st_mtime > stats_file.stat().st_mtime
+    except OSError:
+        return False
+
+
+def storage_info():
+    """Are the data folders in place, where they are (as Windows names it), and how full that drive is (bytes).
+
+    "drive" is the Windows drive letter when the data is on a removable drive (D:), else None.
     """
-    choices = [(path.stem, f"clips/{path.name}") for path in video_files()]
-    value = chosen_game()
-    if value not in [video for _, video in choices]:
-        value = choices[0][1] if choices else None
-    return gr.Dropdown(choices=choices, value=value)
+    info = {"attached": sd_card_ok(), "folder": None, "drive": None, "used": None, "free": None, "total": None}
+    folder = Path(os.readlink(config.DATA_DIR)).parent if config.DATA_DIR.is_symlink() else config.PROJECT_ROOT
+    info["folder"] = main.windows_path(folder)
+    if len(folder.parts) > 2 and folder.parts[1] == "mnt" and len(folder.parts[2]) == 1:
+        info["drive"] = folder.parts[2].upper() + ":"
+    if info["attached"]:
+        try:
+            usage = shutil.disk_usage(config.DATA_DIR.resolve())
+            info.update(used=usage.used, free=usage.free, total=usage.total)
+        except OSError:
+            pass
+    return info
 
 
 # ---------------------------------------------------------------- long jobs in the background
 
-_jobs = {}      # name -> {"process": the running program, "log": the file its output goes to, "heavy": bool}
+# The programs the browser may start, by kind. A router can add its own kind to this table.
+#   script      run as  python src/<script> --video <video> [options]
+#   heavy       loads the player finder or the number reader: one such job at a time on this laptop
+#   name        the job's name; "{stem}" is the video's name. A fixed name means one such job at a time.
+JOB_KINDS = {
+    "run": {"script": "main.py", "heavy": True, "name": "run_{stem}", "options": ["--force", "--from"]},
+    "court_pictures": {"script": "select_court.py", "heavy": False, "name": "click_page", "options": ["--rescan"]},
+    "court_landmarks": {"script": "select_court_keypoints.py", "heavy": False, "name": "click_page", "options": []},
+    "hoops": {"script": "select_hoops.py", "heavy": False, "name": "click_page", "options": []},
+}
+
+_jobs = {}      # name -> {"process", "log", "heavy", "kind", "video", "started"}
+_start_lock = threading.Lock()   # two requests at once must not both pass the "already running" check
 
 
-def start_job(name, command, heavy=False):
-    """Start a long command in the background. Returns False if a job of that name is still running.
+def job_name_for(kind, video):
+    return JOB_KINDS[kind]["name"].format(stem=config.video_stem(video))
 
-    name      a short name for the job, letters and digits, for example "run_game1"
-    command   the program and its options as a list, for example
-              [sys.executable, "src/main.py", "--video", "clips/game1.mp4"]   (run from the project folder)
-    heavy     True for a job that loads the player finder or the number reader. The laptop
-              has the memory for one of those at a time: ask what_is_running() first.
 
-    Everything the command prints goes to data/_dashboard/logs/<name>.log. A page shows
-    it with follow_job(name), and can come back to it after the browser page was closed
-    or reloaded. The job belongs to the dashboard: stopping the dashboard stops it too
-    (the stages save their progress and carry on next time).
+def start_job(kind, video, options=()):
+    """Start a program of the given kind on a video, in the background. Returns the job's name.
+
+    Raises ValueError with a plain message when it cannot start: unknown kind, no such video,
+    the same job still running, or a heavy job while another heavy run is going.
+    Everything the program prints goes to data/_dashboard/logs/<name>.log; job_info(name)
+    reads it back, also after the browser page was closed or reloaded. The job belongs to
+    the dashboard: stopping the dashboard stops it too (the stages save their progress).
     """
+    if kind not in JOB_KINDS:
+        raise ValueError(f"The dashboard does not know the job \"{kind}\".")
+    if not is_clip_video(video):
+        raise ValueError("Choose a game first: that video is not in the clips folder.")
+    with _start_lock:
+        return _start_job_locked(kind, video, options)
+
+
+def _start_job_locked(kind, video, options):
+    what = JOB_KINDS[kind]
+    name = job_name_for(kind, video)
     if job_running(name):
-        return False
+        raise ValueError("That is already running." if what["name"] != "click_page" else
+                         "A click page is already open. Finish it (Save and close) or close it first.")
+    if what["heavy"]:
+        busy = what_is_running()
+        if busy:
+            raise ValueError(f"The laptop is busy with {busy}. One game at a time: wait for it to finish, or stop it.")
+    options = [str(option) for option in options]
+    for option in options:
+        if option.startswith("-") and option not in what["options"]:
+            raise ValueError(f"The option {option} is not allowed for this job.")
+    command = [sys.executable, f"src/{what['script']}", "--video", video] + options
     log = work_dir("logs") / f"{name}.log"
     with open(log, "w", encoding="utf-8") as output:
-        # PYTHONUNBUFFERED: a Python program then prints every line at once, not in blocks
-        # start_new_session: Ctrl+C in the dashboard's terminal then goes to the dashboard only, which
-        # stops its jobs itself (stop_all_jobs). Otherwise a job would get Ctrl+C twice, and the
-        # second one would cut off the saving that the first one started.
-        process = subprocess.Popen([str(part) for part in command], cwd=config.PROJECT_ROOT, stdout=output,
-                                   stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
+        # PYTHONUNBUFFERED: a Python program then prints every line at once, not in blocks.
+        # start_new_session: Ctrl+C in the dashboard's terminal then goes to the dashboard only,
+        # which stops its jobs itself (stop_all_jobs), so no job gets Ctrl+C twice.
+        process = subprocess.Popen(command, cwd=config.PROJECT_ROOT, stdout=output, stderr=subprocess.STDOUT,
+                                   stdin=subprocess.DEVNULL, start_new_session=True,
                                    env=dict(os.environ, PYTHONUNBUFFERED="1"))
-    _jobs[name] = {"process": process, "log": log, "heavy": heavy}
-    return True
+    _jobs[name] = {"process": process, "log": log, "heavy": what["heavy"], "kind": kind, "video": video,
+                   "started": time.time()}
+    return name
 
 
 def job_running(name):
@@ -559,33 +554,132 @@ def job_exit_code(name):
     return _jobs[name]["process"].poll() if name in _jobs else None
 
 
-def follow_job(name):
-    """Yield what a job prints, for live progress, until the job ends.
+def tail(path, size=400_000):
+    """The last `size` characters of a text file ("" if it cannot be read)."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(f.tell() - size, 0))
+            return f.read()
+    except OSError:
+        return ""
 
-    Each item is a list of new lines: first everything printed so far, then about once a
-    second whatever is new. (Each update of a progress bar that rewrites its own line
-    arrives as a line of its own.) Use it in a Gradio event that is a generator, for example
-        shown = []
-        for lines in dash_common.follow_job("run_game1"):
-            shown += lines
-            yield "\\n".join(shown[-30:])
-    Yields nothing if no job of that name was started since the dashboard started.
+
+def run_lines(video):
+    """What the latest run on this game printed, as a list of lines.
+
+    A run started from this dashboard: the job's own log. Any other run (started in a
+    terminal, or before the dashboard was restarted): the last run in the game's run_log.txt.
     """
-    if name not in _jobs:
-        return
-    process = _jobs[name]["process"]
-    unfinished = ""                         # the start of a line that has not been printed to its end yet
-    with open(_jobs[name]["log"], "r", encoding="utf-8", errors="replace") as log:
-        while True:
-            ended = process.poll() is not None      # asked BEFORE reading, so the last lines are never missed
-            *lines, unfinished = (unfinished + log.read()).split("\n")
-            if ended and unfinished:
-                lines.append(unfinished)
-            if lines:
-                yield lines
-            if ended:
-                return
-            time.sleep(1)
+    name = job_name_for("run", video)
+    ours = job_running(name) or (job_exit_code(name) is not None and not is_running(video))
+    if ours:
+        return tail(_jobs[name]["log"]).splitlines()
+    text = tail(config.DATA_DIR / config.video_stem(video) / "run_log.txt")
+    return text[text.rfind("\n===== ") + 1:].splitlines()     # main.py starts every run with a "=====" line
+
+
+def read_progress(lines):
+    """What the printed lines of one run say: which step, how far, how long is left, how it ended.
+
+    Returns {"step": "detect", "step_number": 1, "step_count": 6, "how_far": 0.0 to 1.0 or None,
+             "left": "about 5 min" or "", "detail": the latest progress line,
+             "ended": "finished" | "court" | "stopped" | ""}.
+    """
+    progress = {"step": "", "step_number": 0, "step_count": 0, "how_far": None, "left": "", "detail": "", "ended": ""}
+    for line in lines:
+        new_step = re.match(r"=== Stage (\d+) of (\d+): (\w+)", line)
+        if new_step:
+            progress.update(step=new_step[3], step_number=int(new_step[1]), step_count=int(new_step[2]),
+                            how_far=None, left="", detail="")
+            continue
+        # "  frame 300 of 6000 (5%) | ...", "  200 of 900 frames (...", "  read 40 of 600 frames"
+        counted = re.match(r"\s+(?:frame |read )?(\d+) of (\d+)", line)
+        # "... | about 5 min left", "... about 2:10 to go)", "... at most 40 min to go"
+        left = re.search(r"(about|at most) ([^,|()]+?) (left|to go)", line)
+        if counted and int(counted[2]):
+            progress["how_far"] = min(int(counted[1]) / int(counted[2]), 1.0)
+        if left:
+            progress["left"] = f"{left[1]} {left[2]}"
+        if counted or left:
+            progress["detail"] = line.strip()
+        if "already done - skipped" in line:
+            progress["detail"] = "already done"
+        if line.startswith("=== All stages are done"):
+            progress["ended"] = "finished"
+        elif line.startswith("STOPPED: the court has not been marked"):
+            progress["ended"] = "court"
+        elif line.startswith(("Stopped ", "KeyboardInterrupt")):       # the second: stopped while still loading
+            progress["ended"] = "stopped"
+    return progress
+
+
+def job_address(lines):
+    """The address a click page printed ("http://127.0.0.1:7861"), or None."""
+    for line in reversed(lines):
+        found = re.search(r"http://127\.0\.0\.1:\d+\S*", line)
+        if found:
+            return found[0]
+    return None
+
+
+def job_info(name, last=40):
+    """Everything a page needs to show one job: whether it runs, its last lines, the progress read from them.
+
+    For "run_<stem>" the lines come from run_lines(), so a run started in a terminal, or
+    before the dashboard was restarted, is shown too.
+    """
+    job = _jobs.get(name)
+    if name.startswith("run_"):
+        stem = name[len("run_"):]
+        video = f"clips/{stem}.mp4"
+        matching = [path for path in video_files() if path.stem == stem]
+        video = f"clips/{matching[0].name}" if matching else video
+        lines = run_lines(video)
+        running = job_running(name) or is_running(video)
+        starting = job_running(name) and not is_running(video) and not lines
+    else:
+        lines = tail(job["log"]).splitlines() if job else []
+        running = job_running(name)
+        starting = running and not lines
+    flagged = plain_flags(lines)
+    return {"name": name, "known": job is not None or bool(lines), "running": running, "starting": starting,
+            "exit_code": job_exit_code(name), "kind": job["kind"] if job else None,
+            "video": job["video"] if job else None, "started": job["started"] if job else None,
+            "lines": [line for line in lines if line.strip()][-last:], "progress": read_progress(lines),
+            "address": job_address(lines), "flagged": flagged}
+
+
+# The pipeline's NOTE lines, in the coach's words. The raw line (with its command lines and
+# half sentences) stays in the log; the page shows these instead.
+PLAIN_FLAGS = [
+    ("the court landmarks for this video are PROVISIONAL", "The court was marked with stand-in clicks, so every position-based number is provisional. Do step 2 of the court set-up below yourself."),
+    ("the court has not been marked", "The court is not marked yet: the position steps wait for it. Do the court set-up below."),
+    ("older than tracks.json", "Some result files are older than the tracking, so they may not match it. Process the game again to refresh them."),
+    ("no teams yet", "The teams were not sorted yet, so the court view shows every player in grey."),
+    ("no jersey numbers yet", "No jersey numbers were read yet, so the court view shows tracking IDs instead."),
+    ("do not show which roster team wears which colour", "The tool cannot tell which roster team wears which colour, so no names are used in the stats. Choose \"Our team wears\" above."),
+    ("was stopped part-way", "The court mapping stopped part-way. Press \"Carry on\" to finish it."),
+    ("could not be read back", "A result file could not be read back. Run the step again."),
+]
+
+
+def plain_flags(lines):
+    """The NOTE/WARNING lines of a run, each turned into one plain sentence (unknown ones are left out)."""
+    found = []
+    for line in lines:
+        if not line.lstrip().startswith(("NOTE:", "WARNING:")):
+            continue
+        for key, words in PLAIN_FLAGS:
+            if key.lower() in line.lower() and words not in found:
+                found.append(words)
+    return found
+
+
+def all_jobs():
+    """A short line for every job this dashboard started: {name: {"running", "kind", "video", "exit_code"}}."""
+    return {name: {"running": job_running(name), "kind": job["kind"], "video": job["video"],
+                   "exit_code": job_exit_code(name)} for name, job in _jobs.items()}
 
 
 def stop_job(name, wait=20):
@@ -631,13 +725,10 @@ def is_running(video):
 
 
 def what_is_running():
-    """Plain words for the heavy job going on right now, or "" when the laptop is free for one.
-
-    Looks at this dashboard's own heavy jobs and at runs started from a terminal.
-    """
+    """Plain words for the heavy job going on right now, or "" when the laptop is free for one."""
     for name, job in _jobs.items():
         if job["heavy"] and job_running(name):
-            return f"the job '{name}' started from this dashboard"
+            return f"the processing of {config.video_stem(job['video'])} (started from this dashboard)"
     videos = running_videos()
     if videos:
         return "the processing of " + " and ".join(videos)

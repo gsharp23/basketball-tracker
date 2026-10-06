@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Games · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+/* The game cards, as the mockup draws them. Everything else comes from app.css. */
+.game-card { padding: 0; gap: 0; overflow: hidden; }
+.game-card.needs-you { outline: 3px solid var(--red); }
+.game-picture { height: 150px; background: var(--dark-pane); color: #b9b3b5; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.game-picture img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.game-body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 14px; flex-grow: 1; }
+.game-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.game-title { font-size: 22px; font-weight: 700; }
+.game-when { font-size: 15px; color: var(--muted); }
+.edit-link { font-size: 14px; color: var(--muted); background: none; border: 0; padding: 0; text-decoration: underline; }
+.counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
+.counts > div { background: var(--paper); border-radius: 8px; padding: 10px 4px; }
+.counts .count-value { font-weight: 700; font-size: 22px; }
+.counts .count-label { font-size: 13px; color: var(--muted); }
+.game-text { font-size: 16px; line-height: 1.4; }
+.game-actions { margin-top: auto; display: flex; gap: 10px; }
+.game-actions > .btn { flex: 1; }
+.add-card { min-height: 340px; background: transparent; border: 2px dashed var(--grey); border-radius: 14px; color: var(--soft); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px; }
+.add-card .add-title { font-weight: 700; font-size: 20px; }
+.add-card .add-text { font-size: 15px; color: var(--muted); }
+.add-help { border-top: 6px solid var(--red); }
+.add-help code { display: inline-block; background: var(--paper); padding: 4px 10px; border-radius: 6px; font-size: 16px; }
+</style>
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+
+<main class="page" style="padding-top: 36px; gap: 28px">
+  <div class="page-head">
+    <div class="head-text" style="gap: 4px">
+      <h1 class="title" style="font-size: 56px">Games</h1>
+      <div class="subtitle" id="summary">Looking at the clips folder...</div>
+    </div>
+    <div class="head-side">
+      <button class="btn btn-outline" id="refresh" type="button">Refresh</button>
+      <button class="btn btn-red btn-big" id="add-game" type="button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        Add a game
+      </button>
+    </div>
+  </div>
+
+  <!-- Shown by the "Add a game" buttons. The video is copied with Windows Explorer; nothing is uploaded. -->
+  <section class="card card-pad24 add-help" id="add-help" hidden>
+    <div class="card-row">
+      <h2 class="card-title">Add a game</h2>
+      <button class="btn btn-light" id="add-close" type="button">Close</button>
+    </div>
+    <div class="note">1. In Windows Explorer, copy the video file (an .mp4 from the camera) into the clips folder on the storage card:</div>
+    <div><code id="clips-folder">D:\...\clips</code></div>
+    <div class="note">2. Come back here and press <b>Refresh</b>. The game appears as a card, ready to run.</div>
+    <div class="hint">A full game is about 2 GB; the copy takes a few minutes. Give the file a short name without spaces, like game4.mp4.</div>
+  </section>
+
+  <div class="grid-cards" id="games"></div>
+</main>
+
+<script src="app.js"></script>
+<script src="games.js"></script>
+</body>
+</html>

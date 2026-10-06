@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+/* The pieces of this screen that the shared CSS does not have: the video row, the heat map chips, the court steps. */
+.video-row { display: flex; align-items: center; gap: 12px; }
+.video-bar { flex-grow: 1; height: 8px; background: var(--line); border-radius: 999px; cursor: pointer; }
+.video-bar > span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 999px; }
+.video-time { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.table-min { min-width: 720px; }
+.court-step { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; padding: 16px 0; border-top: 1px solid var(--line); }
+.court-step:first-child { border-top: 0; padding-top: 0; }
+.step-number { width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: #ffffff; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
+.step-number.done { background: var(--green); }
+.step-text { flex: 1 1 320px; display: flex; flex-direction: column; gap: 6px; }
+.step-title { font-size: 18px; font-weight: 700; }
+.step-side { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.check-picture { max-height: 220px; border-radius: 8px; border: 1px solid var(--line); }
+.our-team { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--muted); }
+.our-team select { min-height: 38px; padding: 0 10px; border: 2px solid var(--grey); border-radius: 8px; background: var(--card); font-size: 15px; font-weight: 600; color: var(--ink); }
+.our-team select:focus { outline: 3px solid rgba(29, 95, 191, 0.35); border-color: var(--blue); }
+</style>
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+
+<main class="page" style="gap: 24px">
+  <div class="page-head">
+    <div class="head-text">
+      <a href="games.html" class="back-link">← All games</a>
+      <h1 class="title" id="game-title">Game</h1>
+      <div class="subtitle" id="game-line">Loading...</div>
+      <div class="our-team" id="our-team-row" hidden>
+        <span>Our team wears</span>
+        <select id="our-team" aria-label="Which team is ours"></select>
+        <span class="small muted" id="our-team-guess" hidden>a guess: check it</span>
+      </div>
+    </div>
+    <div class="head-side">
+      <div class="segment">
+        <a href="game.html" id="link-ours" class="on">Our team</a>
+        <a href="opponent.html" id="link-opponent">Opponent</a>
+      </div>
+      <a href="shots.html" id="link-shots" class="btn btn-red">Tag shots</a>
+      <button class="btn btn-outline" id="open-excel" type="button">Stats file for Excel</button>
+    </div>
+  </div>
+  <div class="note" id="stats-path" hidden></div>
+
+  <!-- Processing: shown while the game is running, or until it is finished. -->
+  <section class="card" id="processing" hidden>
+    <div class="card-row">
+      <h2 class="card-title" id="processing-title">Processing this game</h2>
+      <span class="chip chip-grey" id="processing-chip">Not started</span>
+    </div>
+    <div class="stack" style="gap: 8px" id="processing-progress" hidden>
+      <div class="progress-row"><span style="font-weight: 700" id="processing-step">Starting up</span><span class="muted" id="processing-left"></span></div>
+      <div class="progress progress-blue"><span id="processing-bar" style="width: 3%"></span></div>
+      <div class="small muted" id="processing-detail"></div>
+    </div>
+    <div class="note" id="processing-text"></div>
+    <div class="warn" id="processing-flags" hidden></div>
+    <div class="row">
+      <button class="btn btn-red" id="process-start" type="button">Process this game</button>
+      <button class="btn btn-light" id="process-stop" type="button" hidden>Stop</button>
+      <button class="btn btn-link" id="log-toggle" type="button">Details</button>
+    </div>
+    <pre class="log" id="processing-log" hidden></pre>
+  </section>
+
+  <div id="results" hidden>
+    <div class="grid-tiles" id="tiles" style="margin-bottom: 24px">
+      <div class="tile tile-dark"><div class="tile-label">Points tagged</div><div class="tile-value" id="tile-points">0</div></div>
+      <div class="tile"><div class="tile-label">Field goals</div><div class="tile-value" id="tile-fg">0/0</div></div>
+      <div class="tile"><div class="tile-label">Three-pointers</div><div class="tile-value" id="tile-threes">0/0</div></div>
+      <div class="tile"><div class="tile-label">Free throws</div><div class="tile-value" id="tile-ft">0/0</div></div>
+    </div>
+
+    <div class="two-col">
+      <section class="card col-main">
+        <div class="card-row">
+          <h2 class="card-title">Game video</h2>
+          <div class="segment on-paper" id="video-choice">
+            <button type="button" data-video="tactical" class="on">With court view</button>
+            <button type="button" data-video="tracked">Players only</button>
+          </div>
+        </div>
+        <div class="video-pane" id="video-pane">
+          <video id="video" preload="metadata" playsinline></video>
+        </div>
+        <div class="video-row" id="video-row">
+          <button class="btn btn-red btn-icon" id="play" type="button" aria-label="Play">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"></path></svg>
+          </button>
+          <div class="video-bar" id="video-bar"><span id="video-played"></span></div>
+          <div class="video-time" id="video-time">0:00 / 0:00</div>
+        </div>
+      </section>
+
+      <section class="card col-side">
+        <h2 class="card-title">Scoring heat map</h2>
+        <div class="pills" id="heat-pills"></div>
+        <svg class="heat-court" id="heat-court" viewBox="0 0 500 470" role="img" aria-label="Half court with our made and missed shots"></svg>
+        <div class="area-list" id="heat-areas"></div>
+        <div class="legend" id="heat-legend">
+          <span><span class="mark"></span>Made (bigger for a 3)</span>
+          <span><span style="font-weight: 800">×</span>Missed</span>
+          <span class="muted">Shading = more points from there</span>
+        </div>
+        <div class="small muted" id="heat-note"></div>
+        <div class="empty" id="heat-empty" hidden>
+          <div>No shots tagged yet</div>
+          <a class="btn btn-red" id="heat-tag" href="shots.html">Tag shots</a>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top: 24px">
+      <div class="card-row" style="align-items: baseline">
+        <h2 class="card-title">Players</h2>
+        <div class="small muted">"On camera" is time seen in the picture, not minutes played.</div>
+      </div>
+      <div class="warn" id="players-provisional" hidden>The court of this game was marked with stand-in clicks, so "Distance" and "In the paint" are provisional. Mark the court yourself (below) and process the game again.</div>
+      <div class="table-wrap">
+        <table class="table table-min">
+          <thead><tr><th>No.</th><th>Player</th><th>Points</th><th>Shots</th><th>On camera</th><th>Distance</th><th>In the paint</th></tr></thead>
+          <tbody id="players"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="players-note"></div>
+    </section>
+  </div>
+
+  <!-- Court set-up: the three click pages. -->
+  <section class="card card-pad24" id="court">
+    <div class="card-row">
+      <h2 class="card-title">Court set-up</h2>
+      <span class="chip chip-grey" id="court-chip">Checking...</span>
+    </div>
+    <!-- For a marked court the card is folded to this one line; "Do it again" opens the steps. -->
+    <div class="row" id="court-folded" hidden>
+      <span class="note" id="court-folded-words"></span>
+      <button class="btn btn-outline" id="court-unfold" type="button">Do it again</button>
+    </div>
+    <div class="stack" id="court-body" hidden>
+      <div class="note">The camera moves, so the tool needs to know where the court is. Each step opens a page in a new tab; press "Save and close" there when you are done.</div>
+      <div class="warn" id="court-provisional" hidden>This game's landmarks are stand-in clicks, not yours: every position is provisional until you do step 2 yourself.</div>
+      <div id="court-steps"></div>
+      <div class="row">
+        <button class="btn btn-red btn-big" id="court-process" type="button">Process this game</button>
+        <span class="hint" id="court-hint"></span>
+      </div>
+      <div id="court-check" hidden>
+        <button class="btn btn-link" id="court-check-toggle" type="button">Show the court check picture</button>
+        <div id="court-check-holder" hidden>
+          <div class="label">The court as the tool found it (after processing): the green lines should sit on the real court lines.</div>
+          <img class="check-picture" id="court-check-picture" alt="court check picture" style="max-height: none; margin-top: 8px">
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

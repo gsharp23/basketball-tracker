@@ -24,7 +24,7 @@ What is in here
     require_file(path, command)   stop with a plain message if an input is missing
     ffmpeg_path()         the ffmpeg program that comes with imageio-ffmpeg
 
-The big folders (clips, models, data, outputs, crops) are links to the SD card.
+The big folders (clips, models, data, outputs, crops) are links to the data folder (see README.md).
 """
 import fcntl
 import json
@@ -60,11 +60,10 @@ COURT_LENGTH_FT = 84
 COURT_WIDTH_FT = 50
 
 # Shown whenever one of the linked folders cannot be reached.
-SD_CARD_HELP = ("That folder is a link to the SD card. Is the card plugged in and attached?\n"
-                "To attach it, run this in the Ubuntu terminal and then try again:\n"
-                "  sudo mount -t drvfs D: /mnt/d\n"
-                "(On a fresh copy of this project the links have to be made first: see\n"
-                "\"Reinstall from scratch\" in README.md.)")
+SD_CARD_HELP = ("That folder is a link to the data folder (ls -l shows where it points), and the folder\n"
+                "it points to cannot be reached. If the data was moved, make the links again: see\n"
+                "\"If a data folder cannot be reached\" in README.md. Data on a removable drive (D:)\n"
+                "has to be attached first:  sudo mount -t drvfs D: /mnt/d")
 
 # The video locks this program holds (see lock_video).
 _video_locks = {}
@@ -96,8 +95,8 @@ def video_stem(video):
 def card_folder(top, video):
     """The folder <top>/<stem>/ for one video, created if missing.
 
-    top itself (data, outputs) is a link to the SD card and is never created here:
-    if it cannot be reached the card is not attached, and we say so.
+    top itself (data, outputs) is a link to the data folder and is never created here:
+    if it cannot be reached the data folder is missing, and we say so.
     """
     if not top.is_dir():
         sys.exit(f"Cannot reach the folder {top}\n{SD_CARD_HELP}")
@@ -145,13 +144,13 @@ def load_json(path):
     """Read a JSON file and return its contents.
 
     Stops with a plain message if the file is damaged (cut short or full of rubbish),
-    which the SD card has done to files before.
+    which a failing SD card did to files before.
     """
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except ValueError:
-        sys.exit(f"{path} is damaged and cannot be read (the SD card has damaged files before).\n"
+        sys.exit(f"{path} is damaged and cannot be read.\n"
                  "Delete that file, then run  python src/main.py --video <your video>  again:\n"
                  "it makes the file again, or tells you which step to redo.")
 
@@ -159,7 +158,7 @@ def load_json(path):
 def save_json(path, obj, indent=None):
     """Write obj to a JSON file safely.
 
-    The SD card has corrupted files before, so: write to a temporary file first,
+    A failing SD card corrupted files before, so: write to a temporary file first,
     rename it into place (an interrupted write can never leave a half-written
     file under the real name), then read it back and check it is what we wrote.
     Use indent=2 for small files a person may want to read.
@@ -175,7 +174,7 @@ def save_json(path, obj, indent=None):
     with open(path, "r", encoding="utf-8") as f:
         if f.read() != text:
             raise IOError(f"{path} did not read back the same as it was written. "
-                          "The SD card may be failing; run the command again.")
+                          "The disk may be failing; run the command again.")
 
 
 def require_file(path, command):

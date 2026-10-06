@@ -46,7 +46,7 @@ import numpy as np
 
 import config
 
-# EasyOCR keeps its model files here (on the SD card, not in the home folder).
+# EasyOCR keeps its model files here (in the models folder, not in the home folder).
 EASYOCR_DIR = config.MODELS_DIR / "easyocr"
 
 # --- which boxes are worth looking at

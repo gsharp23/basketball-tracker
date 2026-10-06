@@ -359,7 +359,7 @@ def check_video_opens(source):
     cap.release()
     if not ok:
         sys.exit(f"{source} could not be opened as a video.\n"
-                 "The file may be damaged: copy it to the SD card again.")
+                 "The file may be damaged: copy it to the clips folder again.")
 
 
 def join_parts(video, stride, parts):
@@ -397,7 +397,7 @@ def short_read_warning(tracks):
         return None
     return (f"The video could only be read up to {clock(reached / tracks['fps'])} of "
             f"{clock(tracks['frame_count'] / tracks['fps'])}, so everything after that is missing from the results. "
-            f"The file may be damaged: copy it to the SD card again, then run  "
+            f"The file may be damaged: copy it to the clips folder again, then run  "
             f"python src/main.py --video {tracks['video']} --force")
 
 
@@ -419,7 +419,7 @@ def write_video(video, part_files):
     if subprocess.run(command).returncode != 0:
         unfinished.unlink(missing_ok=True)
         (video_parts_dir(video) / JOIN_FAILED).write_text("joining these parts into tracked.mp4 failed\n")
-        print("Could not join the video parts into tracked.mp4 (is the SD card full?).")
+        print("Could not join the video parts into tracked.mp4 (is the disk full?).")
         print("They are kept in", video_parts_dir(video))
         print(f"To try the join again:  python src/detect_track.py --video {video} --resume")
         return False
@@ -466,7 +466,7 @@ def run(video, stride=config.FRAME_STRIDE, max_frames=None, make_video=True, res
     """
     source = config.require_video(video)
     if not config.PLAYER_MODEL.exists():
-        sys.exit(f"Cannot find the model {config.PLAYER_MODEL}\nIs the SD card plugged in?")
+        sys.exit(f"Cannot find the model {config.PLAYER_MODEL}\nIs the models folder in place? (See README.md.)")
     check_video_opens(source)       # before the slow model load, not after it
     config.lock_video(video)
 
@@ -515,7 +515,7 @@ def run(video, stride=config.FRAME_STRIDE, max_frames=None, make_video=True, res
     if not parts:
         # Nothing to write, and whatever was there before (a finished tracks.json) is left alone.
         if finished:
-            sys.exit(f"No frame of {source} could be read. The file may be damaged: copy it to the SD card again.")
+            sys.exit(f"No frame of {source} could be read. The file may be damaged: copy it to the clips folder again.")
         sys.exit("Stopped before any frame was processed. Nothing was changed. Run the same command again.")
     tracks = join_parts(video, stride, parts)
 

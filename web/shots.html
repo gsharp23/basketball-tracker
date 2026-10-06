@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tag shots · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+/* The Tag shots screen only. Everything shared is in app.css. */
+.period-row { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.period-row .segment > button { min-width: 44px; min-height: 44px; padding: 0 12px; border-radius: 6px; justify-content: center; }
+.watch { display: flex; flex-direction: column; gap: 14px; }
+.stage { position: relative; aspect-ratio: 16 / 9; background: var(--dark-pane); border-radius: 12px; overflow: hidden;
+         color: #b9b3b5; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: var(--dark-pane); }
+.stage-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 10px 16px;
+              background: rgba(20, 17, 18, 0.7); border-radius: 8px; pointer-events: none; max-width: 80%; }
+.boxes { position: absolute; inset: 0; }
+/* A player box over the paused picture. Sizes are percentages of the picture, so they follow it at any width. */
+.pbox { position: absolute; border: 2px solid #ffffff; border-radius: 4px; cursor: pointer; background: transparent; padding: 0; }
+.pbox:hover { border-color: #ffd9db; background: rgba(255, 255, 255, 0.12); }
+.pbox.chosen { border: 3px solid var(--red); }
+.pbox .tagline { position: absolute; left: -2px; bottom: 100%; margin-bottom: 2px; background: rgba(20, 17, 18, 0.75); color: #ffffff;
+                 font-weight: 700; font-size: 12px; line-height: 1; padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.pbox.chosen .tagline { background: var(--red); font-weight: 800; font-size: 15px; left: -3px; margin-bottom: 6px; padding: 3px 8px; }
+.transport { background: var(--card); border-radius: 12px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.jump { min-width: 48px; min-height: 48px; background: var(--paper); border: 0; border-radius: 8px; font-weight: 700; font-size: 15px; }
+.jump:hover { background: var(--line); }
+.play { width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--ink); color: #ffffff; display: flex; align-items: center; justify-content: center; }
+.play:hover { background: #2a2526; }
+.scrub { flex: 1 1 160px; height: 8px; background: var(--line); border-radius: 999px; cursor: pointer; position: relative; }
+.scrub > span { display: block; width: 0; height: 100%; background: var(--red); border-radius: 999px; }
+.scrub:focus { outline: 3px solid rgba(29, 95, 191, 0.35); }
+.clock { font-size: 16px; font-weight: 700; min-width: 48px; text-align: right; }
+.side { display: flex; flex-direction: column; gap: 16px; }
+.shooter { display: flex; align-items: center; gap: 14px; }
+.shooter-number { width: 64px; height: 64px; flex: none; border-radius: 12px; background: var(--ink); color: #ffffff; display: flex;
+                  align-items: center; justify-content: center; font-family: var(--font-condensed); font-style: italic; font-weight: 800; font-size: 40px; }
+.shooter-number.empty { background: var(--line); color: var(--muted); }
+.shooter-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shooter-name { font-size: 20px; font-weight: 700; }
+.kind-row { display: flex; gap: 8px; }
+.kind-row > button { flex: 1; min-height: 46px; background: var(--paper); color: var(--ink); border: 2px solid transparent; border-radius: 8px; font-weight: 700; font-size: 16px; }
+.kind-row > button.on { background: var(--card); border-color: var(--ink); }
+.result-row { display: flex; gap: 12px; }
+.result-row > button { flex: 1; min-height: 72px; border-radius: 12px; font-family: var(--font-condensed); font-style: italic; font-weight: 800; font-size: 34px; }
+.made { background: var(--green); color: #ffffff; border: 0; }
+.made:hover { background: #125a32; }
+.missed { background: var(--card); color: var(--ink); border: 3px solid var(--ink); }
+.missed:hover { background: var(--paper); }
+.typed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.typed .segment { padding: 3px; }
+.typed .segment > button { min-height: 38px; padding: 0 12px; font-size: 15px; }
+.typed input { width: 86px; min-height: 40px; padding: 0 10px; border: 2px solid var(--grey); border-radius: 8px; font-size: 16px; font-weight: 700; }
+.tagged { display: flex; flex-direction: column; gap: 10px; }
+.shot-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.shot-row:last-of-type { border-bottom: 0; }
+.shot-row .dot-made { width: 12px; height: 12px; border-radius: 50%; background: var(--green); flex: none; }
+.shot-row .dot-missed { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); flex: none; }
+.shot-row .who { font-weight: 800; width: 34px; flex: none; }
+.shot-row .what { flex-grow: 1; }
+.shot-row .when { color: var(--muted); font-size: 15px; background: none; border: 0; padding: 0; text-decoration: underline dotted; }
+.shot-row .when:hover { color: var(--red-dark); }
+.shot-row.open { border-bottom: 0; }
+.shot-edit { background: var(--paper); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.shot-edit .segment { background: var(--card); padding: 3px; }
+.shot-edit .segment > button { min-height: 36px; padding: 0 12px; font-size: 15px; }
+.shot-edit .delete { margin-left: auto; min-height: 36px; padding: 0 12px; background: transparent; border: 0; color: var(--red-dark); font-weight: 700; text-decoration: underline; }
+.undo { min-height: 44px; padding: 0 14px; background: transparent; border: 0; font-weight: 700; font-size: 15px; color: var(--ink); text-decoration: underline; }
+.undo:disabled { color: var(--grey); text-decoration: none; cursor: default; }
+.heat-link { margin-top: 6px; }
+@media (max-width: 640px) {
+  .period-row { margin-left: 0; }
+  .result-row > button { min-height: 60px; font-size: 28px; }
+}
+</style>
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-text">
+      <a class="back-link" id="back-link" href="game.html">← Game results</a>
+      <h1 class="title">Tag shots</h1>
+    </div>
+    <div class="period-row">
+      <span style="font-size: 15px; font-weight: 600">Period</span>
+      <div class="segment" id="periods" role="group" aria-label="Period"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <section class="col-main watch">
+      <div class="stage" id="stage">
+        <video id="video" preload="auto" playsinline></video>
+        <div class="boxes" id="boxes"></div>
+        <div class="stage-note" id="stage-note">Loading the video...</div>
+      </div>
+      <div class="transport">
+        <button class="jump" id="back5" type="button" aria-label="Back 5 seconds">−5s</button>
+        <button class="play" id="play" type="button" aria-label="Play">
+          <svg id="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"></path></svg>
+          <svg id="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg>
+        </button>
+        <button class="jump" id="fwd5" type="button" aria-label="Forward 5 seconds">+5s</button>
+        <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Where in the video" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="scrub-fill"></span></div>
+        <div class="clock" id="clock">0:00</div>
+      </div>
+      <div class="hint" id="help">Pause at a shot, click the shooter in the picture, then choose made or missed.</div>
+    </section>
+
+    <aside class="col-side side">
+      <section class="card">
+        <div class="shooter">
+          <div class="shooter-number empty" id="shooter-number">?</div>
+          <div class="shooter-text">
+            <div class="small muted">Shooter</div>
+            <div class="shooter-name" id="shooter-name">Click the shooter in the picture</div>
+            <div class="hint" id="shooter-where">Pause the video at the shot first</div>
+          </div>
+        </div>
+        <div class="typed" id="typed">
+          <span class="small muted">Not boxed? Type it:</span>
+          <div class="segment" id="typed-team" role="group" aria-label="Team"></div>
+          <input id="typed-number" type="text" inputmode="numeric" placeholder="No." aria-label="Jersey number" maxlength="2">
+        </div>
+        <div class="kind-row" id="kinds">
+          <button type="button" data-kind="2">2 points</button>
+          <button type="button" data-kind="3">3 points</button>
+          <button type="button" data-kind="ft">Free throw</button>
+        </div>
+        <div class="hint" id="kind-hint" hidden></div>
+        <div class="result-row">
+          <button class="made" id="made" type="button">MADE</button>
+          <button class="missed" id="missed" type="button">MISSED</button>
+        </div>
+      </section>
+
+      <section class="card" style="gap: 10px">
+        <div class="card-row">
+          <h2 class="card-title-small">Tagged so far</h2>
+          <button class="undo" id="undo" type="button" disabled>Undo last</button>
+        </div>
+        <div class="small muted" id="points-line" hidden></div>
+        <div class="tagged" id="tagged"><div class="hint">No shots tagged yet.</div></div>
+        <a class="btn btn-light heat-link" id="heat-link" href="game.html">See the scoring heat map</a>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="shots.js"></script>
+</body>
+</html>

@@ -45,6 +45,7 @@ Memory
 import argparse
 import ctypes
 import gc
+import os
 import sys
 import time
 from pathlib import Path
@@ -255,14 +256,16 @@ def run(video=config.DEFAULT_VIDEO, redo_from=None):
 # ---------------------------------------------------------------- the summary at the end
 
 def windows_path(path):
-    r"""The same file as Windows names it: /mnt/d/hoops-tracker/x.mp4 -> D:\hoops-tracker\x.mp4.
+    r"""The same file as Windows names it, so the coach can paste it into Explorer or Excel.
 
-    Returns None for a file that is not on a Windows drive.
+    A file on a Windows drive: /mnt/d/hoops-tracker/x.mp4 -> D:\hoops-tracker\x.mp4.
+    A file on Ubuntu's own disk: /home/me/hoops-data/x.mp4 -> \\wsl.localhost\Ubuntu\home\me\hoops-data\x.mp4.
     """
-    parts = Path(path).resolve().parts      # resolve() follows the links to the SD card
+    parts = Path(path).resolve().parts      # resolve() follows the links to the data folder
     if len(parts) > 2 and parts[1] == "mnt" and len(parts[2]) == 1:
         return parts[2].upper() + ":\\" + "\\".join(parts[3:])
-    return None
+    distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
+    return f"\\\\wsl.localhost\\{distro}\\" + "\\".join(parts[1:])
 
 
 class Tee:
@@ -276,7 +279,7 @@ class Tee:
         try:
             self.log.write(text)
         except OSError:
-            pass            # the SD card went away: keep printing to the screen
+            pass            # the log file cannot be written: keep printing to the screen
 
     def flush(self):
         self.screen.flush()
@@ -311,8 +314,7 @@ def print_summary(video, seconds):
         if path.exists():
             print(f"  {label}")
             print(f"      {path}")
-            if windows_path(path):
-                print(f"      {windows_path(path)}")
+            print(f"      {windows_path(path)}")
     print(f"  Everything printed during the runs: {data / 'run_log.txt'}")
     # The court summary was printed hours ago on a full game; repeat what may need doing.
     court = config.load_json(data / "court_frames.json")["summary"]

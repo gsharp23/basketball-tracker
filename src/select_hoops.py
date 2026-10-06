@@ -141,7 +141,7 @@ def save_check_picture(video, setup, hoops, view_to_court):
     cv2.imwrite(str(path), sheet)
     back = cv2.imread(str(path))
     if back is None or back.shape != sheet.shape:
-        raise IOError(f"{path} did not read back correctly. The SD card may be failing; run the command again.")
+        raise IOError(f"{path} did not read back correctly. The disk may be failing; run the command again.")
     return path
 
 

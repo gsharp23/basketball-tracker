@@ -7,8 +7,8 @@
     python src/shots.py --video clips/test.mp4 --undo
 
 The ball cannot be found reliably in the video, so nothing here is detected: the coach
-says when a shot was taken, who took it and whether it went in (on the "Shots" tab of the
-dashboard, dash_shots.py, or with --add). The tool then fills in
+says when a shot was taken, who took it and whether it went in (on the "Tag shots" screen of the
+dashboard, web/shots.html through api_shots.py, or with --add). The tool then fills in
     the moment      the nearest moment of the video that was looked at (about 10 a second)
     the position    where that player stood, from positions.json; if he has no position
                     just then, the nearest moment within about a second; otherwise the
@@ -48,6 +48,7 @@ This file has no web page in it and can be tested on its own.
 """
 import argparse
 import bisect
+import datetime
 import contextlib
 import io
 import math
@@ -75,7 +76,7 @@ HEAT_CELL_FT = 2
 
 UNDO_FILE = "shots_undo.json"
 NOT_READY = ("This game has not been processed far enough to tag shots.\n"
-             "Open the Games tab and start it: shots can be tagged once the players have been found, "
+             "Open the Games screen and start it: shots can be tagged once the players have been found, "
              "sorted into teams and their numbers read.")
 CHOOSE_WORTH = ("The position of this shot is not known, so the tool cannot tell a 2 from a 3.\n"
                 "Choose \"2 points\" or \"3 points\" and save it again. (On the command line: add --worth 2 or --worth 3.)")
@@ -102,6 +103,34 @@ def read_json(path):
         raise Problem(str(stop))
 
 
+def game_info(video):
+    """What the coach said about a game, from data/<stem>/game_info.json, every key present.
+
+    {"opponent": who the game was against ("" until typed), "date": "2026-01-24" (default: the day the
+    video file was last changed), "our_team": the label of our team in this game ("white") or None}.
+    Shared by the Games, Game results, Opponent and Tag shots screens.
+    """
+    saved = read_json(game_folder(video) / "game_info.json") if (game_folder(video) / "game_info.json").exists() else {}
+    saved = saved if isinstance(saved, dict) else {}
+    try:
+        changed = datetime.date.fromtimestamp(config.video_path(video).stat().st_mtime).isoformat()
+    except OSError:
+        changed = ""
+    return {"opponent": str(saved.get("opponent") or "").strip(), "date": str(saved.get("date") or changed),
+            "date_is_guess": not saved.get("date"),          # the file's date, not the game's, until typed
+            "our_team": saved.get("our_team") or None}
+
+
+def save_game_info(video, changes):
+    """Change some keys of game_info.json (other keys are kept) and return the whole thing."""
+    path = config.data_dir(video) / "game_info.json"          # makes data/<stem>/ if it is missing
+    saved = read_json(path) if path.exists() else {}
+    saved = saved if isinstance(saved, dict) else {}
+    saved.update(changes)
+    config.save_json(path, saved, indent=2)
+    return game_info(video)
+
+
 def court_size(video):
     """(length, width) of this game's court in feet, as chosen when the court was marked."""
     setup = game_folder(video) / "court_setup.json"
@@ -119,6 +148,7 @@ def load_teams(video):
         "colours"   their jersey colours (blue, green, red), for drawing
         "tags"      {player tag: (team label or None, jersey number or None)}
         "names"     {(team label, jersey number): player name}, from roster.json when it fits
+        "roster_names"  {team label: the roster's name for that team}, when the roster fits
     """
     folder = game_folder(video)
     for name in ("tracks.json", "teams.json", "jerseys.json"):
@@ -139,7 +169,8 @@ def load_teams(video):
     names = {(labels[index], number): name
              for index, (_, players) in matched.items() for number, name in players.items()}
     return {"labels": labels, "colours": [teams["teams"][str(index)]["color_bgr"] for index in (0, 1)],
-            "tags": tags, "names": names}
+            "tags": tags, "names": names,
+            "roster_names": {labels[index]: roster_name for index, (roster_name, _) in matched.items()}}
 
 
 _last_game = {}         # the moments of the game read last. Only one is kept: a full game is big.
@@ -150,6 +181,7 @@ def load_moments(video):
 
     Returns
         "fps", "stride"   frames per second of the game video; every stride-th frame was looked at
+        "width", "height" the size of the game video's pictures, which the boxes are measured in
         "frames"          the frame numbers looked at, in order. A "look" is an index into this list.
         "boxes"           {frame: [(player tag, left, top, right, bottom), ...]} in video pixels
         "spots"           {frame: {player tag: (x, y)}} in court feet (empty if the court is not mapped yet)
@@ -165,8 +197,9 @@ def load_moments(video):
         raise Problem(NOT_READY)
     tracks = read_json(paths[0])
     if not tracks["frames"]:
-        raise Problem("The player detection of this game is empty. Process the game again from the Games tab.")
-    moments = {"fps": tracks["fps"], "stride": tracks["stride"], "frames": [], "boxes": {}, "spots": {}, "positions": False}
+        raise Problem("The player detection of this game is empty. Process the game again from the Games screen.")
+    moments = {"fps": tracks["fps"], "stride": tracks["stride"], "width": tracks["width"], "height": tracks["height"],
+               "frames": [], "boxes": {}, "spots": {}, "positions": False}
     for record in tracks["frames"]:
         moments["frames"].append(record["frame"])
         moments["boxes"][record["frame"]] = [(player["id"], *player["bbox"]) for player in record["players"]]
@@ -220,8 +253,10 @@ def watch_video(video):
     clip = config.video_path(video)
     tracked = config.OUTPUTS_DIR / config.video_stem(video) / "tracked.mp4"
     capture = cv2.VideoCapture(str(clip))
-    codec = int(capture.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode("ascii", "replace").lower()
+    fourcc = int(capture.get(cv2.CAP_PROP_FOURCC))
     capture.release()
+    # a file OpenCV cannot open answers -1 here: then it is no video the browser can play either
+    codec = fourcc.to_bytes(4, "little").decode("ascii", "replace").lower() if fourcc > 0 else ""
     if (clip.suffix.lower() in (".mp4", ".m4v") and codec in ("h264", "avc1")) or not tracked.exists():
         return clip, "game"
     return tracked, "tracked"
@@ -282,7 +317,7 @@ def moment_picture(video, index, chosen=None):
     capture.release()
     if not ok:
         raise Problem("That moment could not be read from the video file. Try a moment a little earlier or later.\n"
-                      "If no moment can be shown, the video file on the SD card is damaged: copy it to the card again.")
+                      "If no moment can be shown, the video file is damaged: copy it to the clips folder again.")
     unit = picture.shape[1] / 1920          # line widths and text sizes are for a 1920-wide picture
     for player in players_at(video, index):
         left, top, right, bottom = (int(round(value)) for value in player["box"])
@@ -466,7 +501,7 @@ def add_shot(video, index, team, number, made, kind="field goal", worth=None, pe
     for other in data["shots"]:
         if all(other[key] == shot[key] for key in ("frame", "team", "number", "tag", "kind")):
             raise Problem(f"That shot is already saved, as shot {other['id']}. "
-                          "To change it, pick it under \"Change or delete a shot\".")
+                          "To change it, click it in the \"Tagged so far\" list.")
     shot["id"] = data["next_id"]
     data["next_id"] += 1
     data["shots"].append(shot)
@@ -540,6 +575,49 @@ def position_text(shot, court):
         side = "outside" if view["outside_three_ft"] > 0 else "inside"
         text += f" (only {abs(view['outside_three_ft']):.1f} ft {side} the three-point line: check 2 or 3)"
     return text
+
+
+def area_name(view, width):
+    """The spot a shot was taken from, in a coach's words: "paint", "left wing", "right corner"...
+
+    view is what judge() returned: the position as the shooter sees it, the hoop ahead.
+    Left and right are the shooter's own. Ideas kept simple: the lane is the paint, the
+    baseline strip either side of it is the baseline (a corner when outside the arc),
+    the rest is elbow / top of the key inside the arc and wing / top of the key outside.
+    """
+    forward = view["from_baseline"] - court_model.HOOP_FROM_BASELINE_FT     # feet in front of the hoop
+    sideways = view["across"] - width / 2                                  # feet to the shooter's right
+    side = "left" if sideways < 0 else "right"
+    if view["from_hoop_ft"] < 4:
+        return "at the rim"
+    if abs(sideways) <= court_model.LANE_WIDTH_FT / 2 and view["from_baseline"] <= court_model.FREE_THROW_FT:
+        return "paint"
+    if forward < 5:
+        return f"{side} corner" if view["outside_three_ft"] > 0 else f"{side} baseline"
+    if view["outside_three_ft"] > 10:
+        return "way out"
+    straight_on = abs(sideways) < 0.45 * forward
+    if view["outside_three_ft"] <= 0:
+        return "top of the key" if straight_on else f"{side} elbow"
+    return "top of the key" if straight_on else f"{side} wing"
+
+
+def where_text(shot, court):
+    """ "From 21 ft, left wing" for the screen, or "Position unknown"."""
+    view = judge(shot, court)
+    if view is None:
+        return "Position unknown"
+    return f"From {view['from_hoop_ft']:.0f} ft, {area_name(view, court[1])}"
+
+
+def list_line(shot, court):
+    """What the "Tagged so far" list says about a shot: "Made 2 · paint", "Missed free throw"."""
+    result = "Made" if shot["made"] else "Missed"
+    if shot["kind"] == "free throw":
+        return f"{result} free throw"
+    view = judge(shot, court)
+    spot = area_name(view, court[1]) if view else "position unknown"
+    return f"{result} {shot['worth']} · {spot}"
 
 
 def shot_text(shot, teams, court):
@@ -727,7 +805,7 @@ def draw_heat_map(data, court, team, player=None, name="", path=None):
         # The SD card has damaged files before: read the picture back to be sure it is whole.
         if cv2.imread(str(path)) is None:
             plt.close(figure)
-            raise Problem(f"{path} could not be read back after saving. The SD card may be failing; try again.")
+            raise Problem(f"{path} could not be read back after saving. The disk may be failing; try again.")
     plt.close(figure)
     return picture
 
@@ -788,7 +866,7 @@ def run(args):
     print()
     print(f"Shots tagged for {video}: {len(data['shots'])}")
     if not data["shots"]:
-        print("  None yet. Tag them on the Shots tab of the dashboard:  python src/dashboard.py")
+        print("  None yet. Tag them on the Shots screen of the dashboard:  python src/dashboard.py")
         return
     print_rows(SHOT_HEADERS, shot_rows(data, teams, court))
     print()

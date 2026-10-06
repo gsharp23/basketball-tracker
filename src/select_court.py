@@ -80,7 +80,7 @@ def video_info(video):
     capture.release()
     if info["frame_count"] <= 0 or info["fps"] <= 0:
         sys.exit(f"{path} could not be opened as a video.\n"
-                 "The file may be damaged: copy it to the SD card again.")
+                 "The file may be damaged: copy it to the clips folder again.")
     return info
 
 
@@ -133,13 +133,13 @@ def view_file(video, frame):
 
 
 def save_view(video, frame, picture):
-    """Save a reference picture and read it back to be sure the SD card kept it whole."""
+    """Save a reference picture and read it back to be sure the disk kept it whole."""
     path = view_file(video, frame)
     path.parent.mkdir(exist_ok=True)
     cv2.imwrite(str(path), picture, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     back = cv2.imread(str(path))
     if back is None or back.shape != picture.shape:
-        raise IOError(f"{path} did not read back correctly. The SD card may be failing; run the command again.")
+        raise IOError(f"{path} did not read back correctly. The disk may be failing; run the command again.")
 
 
 def add_views(video, frames, wanted):
@@ -226,7 +226,7 @@ def save_sheet(video, frames, fps, main):
     cv2.imwrite(str(path), sheet)
     back = cv2.imread(str(path))
     if back is None or back.shape != sheet.shape:
-        raise IOError(f"{path} did not read back correctly. The SD card may be failing; run the command again.")
+        raise IOError(f"{path} did not read back correctly. The disk may be failing; run the command again.")
     return path
 
 

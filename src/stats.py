@@ -336,7 +336,7 @@ def save_text(path, text):
     with open(path, "r", encoding="utf-8-sig", newline="") as f:
         if f.read() != text:
             raise IOError(f"{path} did not read back the same as it was written. "
-                          "The SD card may be failing; run the command again.")
+                          "The disk may be failing; run the command again.")
 
 
 def csv_text(result):
