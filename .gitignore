@@ -7,6 +7,10 @@
 
 # What belongs in git
 !*.py
+# The dashboard's web pages: text only; the commit guard refuses any embedded picture data
+!web/**/*.html
+!web/**/*.css
+!web/**/*.js
 !*.md
 !requirements.txt
 !.gitignore

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Refuses a push unless EVERY file in EVERY commit being pushed is a kind that belongs in git.
 # Deleting a file in a later commit does not remove it from history, so the whole history is checked.
-allowed='(\.py|\.md)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
+allowed='(\.py|\.md)$|^web/.*\.(html|css|js)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
 linked='^(clips|models|outputs|crops|data)(/|$)'
 blank_rosters=" 4873f6ce476a0dfe9485be0e550e79005a73f837 "
 empty_file=e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
@@ -19,7 +19,8 @@ while read local_ref local_sha remote_ref remote_sha; do
             *.ipynb)        # accepted only with every cell's outputs and attachments empty
                 git cat-file -p "$sha" | python3 -c "import json,sys; nb=json.load(sys.stdin); sys.exit(1 if any(c.get('outputs') or c.get('attachments') for c in nb.get('cells', [])) else 0)" 2>/dev/null || echo "$path (notebook with saved outputs)" ;;
             *)
-                if ! echo "$path" | grep -qE "$allowed" || echo "$path" | grep -qE "$linked"; then echo "$path"; fi ;;
+                if ! echo "$path" | grep -qE "$allowed" || echo "$path" | grep -qE "$linked"; then echo "$path";
+                elif git cat-file -p "$sha" | grep -qE 'data:(image|video|audio)/[a-z+.-]+;base64,[A-Za-z0-9+/]{40,}|[A-Za-z0-9+/]{300,}'; then echo "$path (embedded picture or binary data)"; fi ;;
         esac
     done; git -c core.quotePath=false log -m --numstat --format= "$local_sha" | awk -F'\t' '$1 == "-" && $2 == "-" {print $3 " (binary)"}')
     blocked=$(echo "$blocked" | sed '/^$/d' | sort -u)

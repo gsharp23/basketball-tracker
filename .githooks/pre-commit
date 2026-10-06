@@ -2,7 +2,7 @@
 # Refuses a commit unless every file in it is a kind that belongs in git: Python code, Markdown,
 # requirements.txt, .gitignore, these two guard scripts and the BLANK roster template.
 # The players in the footage are minors, so photos, video, results and names must never reach GitHub.
-allowed='(\.py|\.md)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
+allowed='(\.py|\.md)$|^web/.*\.(html|css|js)$|^requirements\.txt$|^\.gitignore$|^\.githooks/(pre-commit|pre-push)$|^roster\.example\.json$|\.ipynb$'
 linked='^(clips|models|outputs|crops|data)(/|$)'
 # git hash of the blank roster.example.json. Add a hash here only if the blank template itself changes.
 blank_rosters=" 4873f6ce476a0dfe9485be0e550e79005a73f837 "
@@ -22,7 +22,10 @@ fi
 # so a notebook is accepted only when every cell's outputs and attachments are empty.
 by_notebook=$(echo "$staged" | grep -E '\.ipynb$' | while read -r f; do
     git show ":$f" | python3 -c "import json,sys; nb=json.load(sys.stdin); sys.exit(1 if any(c.get('outputs') or c.get('attachments') for c in nb.get('cells', [])) else 0)" 2>/dev/null || echo "$f  (notebook with saved outputs: clear all outputs first)"; done)
-blocked=$(printf '%s\n%s\n%s\n%s\n%s\n' "$by_name" "$by_folder" "$by_content" "$by_roster" "$by_notebook" | sed '/^$/d' | sort -u)
+# A text file can smuggle a picture as base64 text: refuse data: URLs and long base64 runs.
+by_embedded=$(echo "$staged" | while read -r f; do
+    git show ":$f" | grep -qE 'data:(image|video|audio)/[a-z+.-]+;base64,[A-Za-z0-9+/]{40,}|[A-Za-z0-9+/]{300,}' && echo "$f  (contains embedded picture or binary data)"; done)
+blocked=$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$by_name" "$by_folder" "$by_content" "$by_roster" "$by_notebook" "$by_embedded" | sed '/^$/d' | sort -u)
 if [ -n "$blocked" ]; then
     echo "COMMIT BLOCKED: these files must not go into git (photos, video, models, results or player names):"
     echo "$blocked" | sed 's/^/    /'
