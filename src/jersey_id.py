@@ -182,8 +182,10 @@ def load_reader():
     if not config.MODELS_DIR.is_dir():
         sys.exit(f"Cannot reach the folder {config.MODELS_DIR}\n{config.SD_CARD_HELP}")
     EASYOCR_DIR.mkdir(exist_ok=True)
+    gpu = config.device() != "cpu"      # False on the laptop, True on Colab
+    print(f"The number reader runs on {'the graphics card' if gpu else 'the CPU'}.", flush=True)
     try:
-        return easyocr.Reader(["en"], gpu=False, verbose=False,
+        return easyocr.Reader(["en"], gpu=gpu, verbose=False,
                               model_storage_directory=str(EASYOCR_DIR),
                               user_network_directory=str(EASYOCR_DIR / "user_network"))
     except (RuntimeError, MemoryError, OSError) as error:

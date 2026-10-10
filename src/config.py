@@ -23,6 +23,7 @@ What is in here
     save_json(path, obj)  write a JSON file safely and check it by reading it back
     require_file(path, command)   stop with a plain message if an input is missing
     ffmpeg_path()         the ffmpeg program that comes with imageio-ffmpeg
+    device()              "cpu" on the laptop, "cuda:0" on a computer with a graphics card (Colab)
 
 The big folders (clips, models, data, outputs, crops) are links to the data folder (see README.md).
 """
@@ -185,6 +186,20 @@ def require_file(path, command):
     """
     if not Path(path).exists():
         sys.exit(f"Cannot find {path}\nRun this first:  {command}")
+
+
+def device():
+    """Where the two models run: "cpu" on the laptop, "cuda:0" on a computer with a graphics card.
+
+    The environment variable HOOPS_DEVICE decides: "auto" (the default) takes the graphics
+    card when torch can see one, else the CPU; "cpu" forces the CPU even when there is a
+    graphics card. On the laptop there is no graphics card, so nothing changes there.
+    """
+    wanted = os.environ.get("HOOPS_DEVICE", "").strip().lower() or "auto"
+    if wanted != "auto":
+        return wanted
+    import torch
+    return "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 def ffmpeg_path():

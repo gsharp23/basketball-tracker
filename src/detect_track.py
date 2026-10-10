@@ -97,10 +97,10 @@ def parse_args():
 
 # ---------------------------------------------------------------- detection
 
-def detect(model, frame):
+def detect(model, frame, device="cpu"):
     """Run the model on one frame. Returns {class name: (boxes, confidences)}."""
     # agnostic_nms: one box per person, so nobody is reported as both Player and Ref.
-    result = model(frame, imgsz=640, conf=DETECT_CONF, agnostic_nms=True, verbose=False)[0]
+    result = model(frame, imgsz=640, conf=DETECT_CONF, agnostic_nms=True, verbose=False, device=device)[0]
     boxes = result.boxes.xyxy.cpu().numpy()
     confs = result.boxes.conf.cpu().numpy()
     classes = result.boxes.cls.cpu().numpy().astype(int)
@@ -267,10 +267,12 @@ def process_video(video, stride, max_frames, make_video, start_frame, next_id, p
     if start_frame > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
-    print("Loading the model...", flush=True)
+    device = config.device()        # "cpu" on the laptop, the graphics card on Colab
+    print(f"Loading the model... (running on {'the CPU' if device == 'cpu' else 'the graphics card, ' + device})",
+          flush=True)
     model = YOLO(str(config.PLAYER_MODEL))
     # The model's first run is slow. Do it once on a black picture so the speed shown is honest.
-    model(np.zeros((360, 640, 3), np.uint8), imgsz=640, verbose=False)
+    model(np.zeros((360, 640, 3), np.uint8), imgsz=640, verbose=False, device=device)
     player_tracker = make_tracker(tracked_fps)
     ref_tracker = make_tracker(tracked_fps)
     player_ids, ref_ids = {}, {}
@@ -299,7 +301,7 @@ def process_video(video, stride, max_frames, make_video, start_frame, next_id, p
             finished = True
             break
 
-        found = detect(model, frame)
+        found = detect(model, frame, device)
         record = {
             "frame": frame_index,
             "players": track(player_tracker, *found["Player"], player_ids, state),

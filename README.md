@@ -371,6 +371,86 @@ game. The dashboard has no button for this on purpose (its "Carry on" and
 
 ---
 
+## Running a game on Colab
+
+The laptop takes a day or two per game. Google Colab lends a graphics card for
+free, and the same pipeline runs there in a fraction of the time (not yet
+measured: no game has been run on Colab so far). The pieces are
+`src/colab_worker.py` (a plain script that works through a Drive folder) and
+`colab/process_games.ipynb` (the notebook that starts it). Nothing in the
+code uploads anything; putting a video in Google Drive is the coach's own step.
+
+**Set up once.** In Google Drive, make a folder `Hoops Tracker` (the name is
+the one settable line at the top of the notebook) with a `models` folder
+inside, and upload `player_detector.pt` from the laptop's models folder into
+it. The worker makes `inbox`, `outbox` and `models/easyocr` by itself.
+
+**For each game.**
+
+1. Upload the video to `inbox/` (for example `inbox/game3.mp4`).
+2. If the court has been marked on the laptop (see "Mark the court"), upload
+   the four court things from `data/game3/` (`court_setup.json`,
+   `court_calibration.json`, `hoops.json` and the `court_views` folder) to
+   `inbox/game3/`. Without them the worker still does the long stages
+   (detection, teams, jersey numbers) and then waits for the court.
+3. Open `colab/process_games.ipynb` in Colab (from GitHub: File > Open
+   notebook > GitHub, or upload the file), choose the T4 GPU under Runtime >
+   Change runtime type, and press Runtime > Run all. Allow the Drive
+   connection when asked. The last cell runs until it is stopped: it looks in
+   the inbox every minute and processes what it finds, printing the same lines
+   `main.py` prints on the laptop.
+4. What comes back, in `outbox/game3/`: `status.json` (`done`, `failed`,
+   `needs_court` or `running`, with a progress line while it runs), `data/`
+   (every result file: `stats.json`, `stats.csv`, `tracks.json`, ...),
+   `outputs/` (the videos and pictures) and `crops/`. `worker.log` in the
+   Drive folder has everything that was printed. Download `data/game3/` and
+   `outputs/game3/` into the laptop's data folders and the dashboard shows
+   the game as finished.
+5. `needs_court`: mark the court on the laptop, put the court files in
+   `inbox/game3/`, and the worker does the remaining stages the next time it
+   looks (within a minute if it is running, otherwise at the next Run all).
+
+**Limits.**
+
+- Nothing happens unless the notebook is running. Closing the tab, or leaving
+  it idle for a while, stops the processing; a free session also ends by
+  itself after about 12 hours. Nothing is lost: the results so far are copied
+  to the outbox every minute, and the next Run all carries on where it
+  stopped (finished stages are skipped, a half-done one continues).
+- While the video and the results are in Google Drive they sit in the coach's
+  own Google account, under Google's terms. The worker never deletes a video
+  from the inbox; that is for the coach (or later the dashboard) to do.
+- The roster never leaves the laptop, so on Colab the numbers are read
+  without it (a number that is on neither team counts as a full vote there)
+  and the stats have no names. Pressing "Carry on" on the laptop afterwards
+  redoes the stats step with the roster in seconds.
+- One game at a time; the games are taken in name order.
+- The code takes the graphics card by itself when there is one
+  (`HOOPS_DEVICE=auto` is the default; `HOOPS_DEVICE=cpu` forces the CPU).
+  On the laptop there is none, so nothing changes there.
+
+What was tested, and what was not:
+
+- The worker was run on this laptop (CPU) against a stand-in Drive folder on
+  the laptop's disk, with the test clip under two new names: one with its
+  court files, one without. The first came back `done` after 12 minutes
+  with every result file, both videos and the pictures; its `teams.json`,
+  `jerseys.json` and `positions.json` are byte-for-byte the same as the
+  laptop's own results for the test clip, and `tracks.json`,
+  `court_frames.json` and `stats.json` differ only in the video's name, the
+  seconds the court stage took and a warning that quotes the name. The
+  second came back `needs_court` after 7 minutes with the tracking, teams
+  and jersey results; after its court files were put in the inbox, the next
+  run skipped the three finished stages and finished it in 45 seconds. A
+  run with nothing to do exited in 9 seconds. A run cut short by the laptop
+  restarting was picked up by the next one.
+- **Nothing has been run on Colab, or on a graphics card.** The notebook's
+  cells, the Drive mount, the installs on Colab's Python, the speed on the
+  T4 and whether the results on the graphics card equal the CPU's have not
+  been tried. A full game has not been run through the worker either.
+
+---
+
 ## What comes out
 
 Everything is written to the data folder, in folders named after the video
@@ -880,9 +960,9 @@ src/                  the pipeline (main.py runs it all), and the dashboard:
                       with the logic in shots.py, possessions.py, ball_labels.py
 web/                  the dashboard's screens: plain HTML, CSS and JavaScript
                       (text only; no picture may be kept here, see .githooks)
-colab/                the notebook that trains a ball model on Google Colab
-                      (.gitignore lets only code and text through by itself,
-                      so the notebook needs "git add -f" to be in git)
+colab/                the two Google Colab notebooks: process the games there
+                      (process_games.ipynb, run by src/colab_worker.py) and
+                      train a ball model (train_ball_model.ipynb)
 experiments/          one-off test scripts behind the two experiments above
 roster.example.json   blank template: jersey number -> player name
 requirements.txt
