@@ -305,7 +305,7 @@ one stylesheet, `web/app.css`, taken from the approved design.
 
 | File | What it is |
 |---|---|
-| `src/dashboard.py` | The server: the pages, `/files/...`, the shortcut, the "data folder not found" page, starting and stopping. It includes `dash_api.py`, `api_settings.py` and each screen module below if its file exists |
+| `src/dashboard.py` | The server: the pages, `/files/...`, the guard that answers only this laptop's own pages (see "Keeping it safe"), the shortcut, the "data folder not found" page, starting and stopping. It includes `dash_api.py`, `api_settings.py` and each screen module below if its file exists |
 | `src/dash_common.py` | What the API modules share: the list of games with the state of each stage, settings, branding, storage, and the background jobs (processing, the click pages, picking pictures, the speed test; their logs in `data/_dashboard/logs/`) |
 | `src/dash_api.py` | The shared routes (games, seasons, teams, play types, settings, jobs, branding); its docstring is the contract the screens follow |
 | `src/library.py` | The data model above and every number the screens share |
@@ -477,9 +477,12 @@ measured: no game has been run on Colab so far). The pieces are
 `src/colab_worker.py` (a plain script that works through a Drive folder),
 `colab/process_games.ipynb` (the notebook that starts it) and, on the laptop,
 `src/drive_link.py` (the dashboard's "Run on Colab" and the way results come
-back). Nothing in the code talks to the internet: Google Drive for desktop
-carries the files, and the dashboard only copies them to and from a folder on
-this computer.
+back). On the laptop nothing in this code talks to the internet (the pages' two
+fonts, above, are the dashboard's only outside contact): Google Drive for
+desktop carries the files, and the dashboard only copies them to and from a
+folder on this computer. On Colab the notebook fetches the program from GitHub
+and its libraries, and the number reader fetches its own two files if Drive's
+`models` folder does not hold them.
 
 **Set up once.** Install Google Drive for desktop, make a folder `Hoops
 Tracker` in Drive, and on the Settings screen type where that folder is on
@@ -1141,6 +1144,72 @@ names may reach GitHub.
 - The guards were tested against 14 ways a picture, a result file or a name
   could slip in. They work only where they are switched on (see "Reinstall
   from scratch"), and they do not cover uploads made through the GitHub website.
+
+---
+
+## Keeping it safe
+
+The players are children, so the footage, the pictures and the names must stay
+with the coach. This is what the program does by itself, and what only the
+coach can do.
+
+**What the program does by itself**
+
+- The dashboard answers only this laptop's own browser, at `http://127.0.0.1:7860`
+  (or `localhost`). A request addressed to any other name is refused, and a
+  request that changes something (a PUT, POST or DELETE) is accepted only when
+  it carries a header that the dashboard's own pages add and no other website
+  can: a web page from elsewhere, open in the same browser, cannot press the
+  buttons for you or read the answers. The roster, the settings and the logs
+  are never handed to the browser as files, and an upload bigger than a few
+  megabytes (a logo is the only thing the pages upload) is refused.
+- Detector files (`.pt`) are opened the safe way, on the laptop and on Colab:
+  such a file can carry code, and this setting stops it from running. Only put
+  a detector in the `models` folder (or in Drive's `models`) that came from
+  this project: the three compared in "Model comparison on real game footage" above or one trained by
+  the notebook. The number reader's two files come from that reader's own
+  project and are opened by it; it fetches them itself when they are missing.
+- The Colab notebooks ask for the T4 graphics card (the cheapest) and send no
+  usage statistics. On Colab the notebook fetches the program from GitHub, its
+  libraries and, when Drive's `models` folder does not hold them, the number
+  reader's files; nothing else leaves the machine. On the laptop nothing in the
+  code uploads anything: Google sees what you put in Drive, and the laptop's
+  address when the pages fetch their two fonts.
+
+**What only you can do** (once, and after each game)
+
+1. **Your Google account.** Turn on 2-step verification (myaccount.google.com,
+   Security). Keep the Drive folder `Hoops Tracker` unshared: right-click it in
+   Drive, Share, and it must say that only you have access. While a notebook
+   runs, Colab can see your whole Google Drive, not only that folder, so keep
+   anything you would not want a program to see out of that account, or use a
+   separate Google account for Hoops Tracker.
+2. **Your GitHub account.** Turn on two-factor authentication
+   (github.com/settings/security). Colab fetches the program from the public
+   GitHub copy each time it runs, so whoever could change that copy could change
+   what runs with your Drive open. On the laptop, remove saved sign-ins you no
+   longer need: `git config --global --unset credential.helper` and delete
+   `~/.git-credentials`, revoke old tokens at github.com/settings/tokens, and
+   `gh auth logout` when you are not using `gh`.
+3. **After each game on Colab.** When the game's row says Finished, the results
+   are on the laptop: delete `outbox/<game>` in Google Drive and empty Drive's
+   Trash (a deleted file stays in the Trash for 30 days). Stop the notebook
+   (Runtime, Disconnect and delete runtime) once every game you sent is
+   finished, or it keeps using your compute units while it waits. Watch your
+   storage at one.google.com/storage: each game leaves about 2 GB of results.
+4. **Screenshots.** A screenshot of the dashboard shows the school and the
+   players. If Windows saves screenshots into OneDrive (Pictures, Screenshots),
+   it copies them to Microsoft's cloud: keep dashboard screenshots out of that
+   folder, or turn off "Save screenshots I capture to OneDrive" in OneDrive's
+   settings. Pictures the dashboard's own tests leave under
+   `outputs/_dashboard/shots` can be deleted.
+5. **Names.** The file name travels to Drive, to Colab and into the training
+   zip, so a plain name such as `game3.mp4` or `2026-01-24_home.mp4` is the
+   safest. Never put a player's name in a file name. The scouting report prints
+   the school's name: treat the PDF like team paperwork.
+6. **The drives.** If the videos live on a removable drive, encrypt it
+   (BitLocker To Go) or keep it somewhere safe, and check that the laptop's
+   own drive is encrypted (Windows Settings, BitLocker).
 
 ---
 

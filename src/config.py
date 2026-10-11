@@ -37,6 +37,10 @@ from pathlib import Path
 # Nothing here may talk to the internet. Ultralytics (the detector library) checks whether it is online when it
 # is imported; this setting makes it skip that check. Every module imports config before the detector.
 os.environ.setdefault("YOLO_OFFLINE", "1")
+# A model file (.pt) is a Python "pickle": opened the usual way, it can run whatever code it holds. This setting
+# makes the detector library open every model the safe way (only the known model classes are allowed), so a model
+# file from the wrong place cannot run anything. The project's own models all open this way.
+os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "1")
 
 # The repo folder, worked out from where this file is, so scripts work from any folder.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

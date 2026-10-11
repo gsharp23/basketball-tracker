@@ -104,7 +104,12 @@ team.html?team=riverside-high (ids as the library makes them). In JS:
 FILES. The browser reads the data folders' files at  /files/<folder>/<path>  with <folder> one of outputs, crops,
 clips, data, branding; the path is inside that folder. Videos support seeking (HTTP Range).
     /files/clips/test.mp4   /files/outputs/test/tracked.mp4   /files/data/_training/frames/test/test_000123.jpg
-    /files/branding/logo.png      In JS: fileUrl('outputs', 'test/tracked.mp4'). Nothing else is ever served.
+    /files/branding/logo.png      In JS: fileUrl('outputs', 'test/tracked.mp4'). Nothing else is ever served
+    (data/_library and data/_dashboard, the names, settings and logs, are refused: the pages use /api for those).
+
+GUARD. The server answers only requests addressed to 127.0.0.1 or localhost, and accepts a PUT, POST or DELETE
+  only with the header  X-Hoops: 1  (dashboard.py, own_pages_only). api() in web/app.js adds it to every request;
+  a page that sends a request some other way (settings.js's logo upload) adds it itself.
 
 JOBS. To run a long program:  POST /api/jobs/start {"kind": "run", "video": "clips/game1.mp4"}
   Kinds (dash_common.JOB_KINDS): "run" (main.py; options --force, --from <stage>), "court_pictures",

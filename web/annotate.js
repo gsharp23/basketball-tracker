@@ -47,7 +47,7 @@ async function loadQueue() {
   showProgress();
 }
 
-function gameWords(words) { return (words || '').replace(/\d{4}-\d{2}-\d{2}/, fmtDate); }   // "vs Northside · 2026-10-03" -> "... · 3 Oct 2026"
+function gameWords(words) { return (words || '').replace(/\d{4}-\d{2}-\d{2}/, fmtDate); }   // "vs Oakmont · 2026-10-03" -> "... · 3 Oct 2026"
 
 function showProgress() {
   const counts = page.counts;

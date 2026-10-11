@@ -18,7 +18,16 @@ How it is put together
     src/library.py  the data model: seasons, teams, game info, the numbers the screens share.
     /files/<folder>/<path>   files from the data folders for the browser: videos (with seeking),
                     pictures, result files. Only outputs/, crops/, clips/, data/ and the
-                    branding folder; never the home folder or the code.
+                    branding folder; never the home folder or the code, and never data/_library
+                    or data/_dashboard (the names, the settings, the logs: the pages get what
+                    they need from /api).
+
+Who may talk to it: only this laptop's own browser, at http://127.0.0.1:<port> or
+http://localhost:<port>. A web page from anywhere else, open in the same browser, could
+otherwise send it requests (and, with a DNS trick, read the answers), so own_pages_only
+below refuses any other address, and accepts a PUT, POST or DELETE only with the X-Hoops
+header that web/app.js adds to every request. A request body bigger than a logo is refused
+before it is read.
 
 The school's name, logo, colours and artwork come from the branding folder
 (data/_dashboard/branding/) while the program runs. They are never written in the
@@ -36,11 +45,13 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.body_limit import RequestBodyLimitMiddleware
 
 import config
 import dash_common
@@ -50,6 +61,13 @@ WEB_DIR = config.PROJECT_ROOT / "web"
 SRC_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="Hoops Tracker", docs_url=None, redoc_url=None, openapi_url=None)
+
+# The biggest thing a page ever sends is the logo (5 MB; videos never travel through the dashboard). A body
+# bigger than this is refused (413) before it is read, so a huge or endless upload cannot fill the memory.
+app.add_middleware(RequestBodyLimitMiddleware, max_body_size=10_000_000)
+
+# The only addresses the dashboard answers to (see own_pages_only below).
+OWN_HOSTS = ("127.0.0.1", "localhost")
 
 
 # ---------------------------------------------------------------- the API routers
@@ -112,6 +130,14 @@ def serve_file(folder: str, path: str):
     # cannot lead out. The file itself may be a link to a video kept elsewhere on the laptop (clips/game1.mp4).
     if (folder_real != root_real and root_real not in folder_real.parents) or not target.is_file():
         raise HTTPException(404, "No such file.")
+    # The names file, the settings and the logs are never handed out as files: the pages get what they need
+    # from /api, and the logo has its own entry (/files/branding/). Checked on the real path, so a spelling
+    # like "./_library/..." or "x/../_dashboard/..." does not get round it.
+    if folder == "data":
+        for private in ("_library", "_dashboard"):
+            private_real = root_real / private
+            if folder_real == private_real or private_real in folder_real.parents:
+                raise HTTPException(404, "No such file.")
     return FileResponse(target)
 
 
@@ -149,6 +175,28 @@ async def need_the_card(request: Request, call_next):
         if path.startswith("/api/"):
             return JSONResponse({"detail": "A data folder cannot be reached. Reload the page: it says which one."}, 503)
         return HTMLResponse(missing_card_page(), 503)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def own_pages_only(request: Request, call_next):
+    """Answer this laptop's own browser only, and let only the dashboard's own pages change things.
+
+    The server listens on 127.0.0.1, but a web page from somewhere else, open in the same browser, can
+    still send requests to it. So: (1) a request addressed to any name but 127.0.0.1 or localhost is
+    refused (a page that made its own name point at this laptop could otherwise read every answer);
+    (2) a PUT, POST or DELETE is accepted only with the header X-Hoops, which web/app.js adds to every
+    request and no other website's page can add (the browser would ask this server first, and it says no),
+    and only when the page's own address (the Origin header, when the browser sends one) is this laptop.
+    """
+    if request.url.hostname not in OWN_HOSTS:
+        port = (request.scope.get("server") or ("", PORT))[1]
+        return JSONResponse({"detail": f"Hoops Tracker answers only at http://127.0.0.1:{port} on this laptop. "
+                                       "Open that address instead."}, 403)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = urlsplit(request.headers.get("origin", "")).hostname
+        if request.headers.get("x-hoops") != "1" or (origin and origin not in OWN_HOSTS):
+            return JSONResponse({"detail": "Only the dashboard's own pages may change things."}, 403)
     return await call_next(request)
 
 

@@ -9,7 +9,7 @@ const shown = {};             // game -> true when all of its pictures are shown
 const FIRST_PICTURES = 24;
 
 function num(n) { return Number(n || 0).toLocaleString('en-US'); }
-function gameWords(words) { return (words || '').replace(/\d{4}-\d{2}-\d{2}/, fmtDate); }   // "vs Northside · 2026-10-03" -> "... · 3 Oct 2026"
+function gameWords(words) { return (words || '').replace(/\d{4}-\d{2}-\d{2}/, fmtDate); }   // "vs Oakmont · 2026-10-03" -> "... · 3 Oct 2026"
 
 /* ---- the games table ---- */
 

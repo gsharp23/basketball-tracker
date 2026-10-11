@@ -23,9 +23,11 @@ async function sendLogo(file) {
   const word = byId('logo-word');
   if (word) word.textContent = 'Saving...';
   await tryToast(async function () {
+    if (file.size > 5000000) throw new Error('That picture is too big: use one under 5 MB.');   // the server's rule, said here first
     let reply;
     try {
-      reply = await fetch('/api/settings/logo?name=' + encodeURIComponent(file.name), { method: 'PUT', body: file });
+      reply = await fetch('/api/settings/logo?name=' + encodeURIComponent(file.name),
+                          { method: 'PUT', headers: { 'X-Hoops': '1' }, body: file });   // the header api() adds
     } catch (problem) {
       throw new Error('Hoops Tracker is not answering. Is the black window still open?');
     }

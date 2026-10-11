@@ -7,7 +7,9 @@
 // (the "detail" the API sent, or what went wrong with the connection).
 async function api(path, options) {
   options = options || {};
-  const settings = { method: options.method || 'GET', headers: {} };
+  // X-Hoops says "this comes from the dashboard's own pages": the server changes nothing without it, and no
+  // other website's page can add it (see own_pages_only in src/dashboard.py).
+  const settings = { method: options.method || 'GET', headers: { 'X-Hoops': '1' } };
   if (options.body !== undefined) {
     settings.headers['Content-Type'] = 'application/json';
     settings.body = JSON.stringify(options.body);
