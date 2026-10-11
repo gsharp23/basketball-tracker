@@ -184,9 +184,14 @@ def load_reader():
     EASYOCR_DIR.mkdir(exist_ok=True)
     gpu = config.device() != "cpu"      # False on the laptop, True on Colab
     print(f"The number reader runs on {'the graphics card' if gpu else 'the CPU'}.", flush=True)
+    # The reader's files are kept in models/easyocr. On the laptop they are already there, so nothing is
+    # fetched from the internet. On a fresh machine (Colab) they are missing, and EasyOCR fetches its own
+    # two files (about 95 MB) from its publisher once; that is a download, never an upload.
+    have_files = (EASYOCR_DIR / "craft_mlt_25k.pth").exists() and (EASYOCR_DIR / "english_g2.pth").exists()
+    if not have_files:
+        print("The number reader's files are not here yet; fetching them once (about 95 MB)...", flush=True)
     try:
-        # download_enabled=False: the reader's files are kept in models/easyocr; nothing is fetched from the internet.
-        return easyocr.Reader(["en"], gpu=gpu, verbose=False, download_enabled=False,
+        return easyocr.Reader(["en"], gpu=gpu, verbose=False, download_enabled=not have_files,
                               model_storage_directory=str(EASYOCR_DIR),
                               user_network_directory=str(EASYOCR_DIR / "user_network"))
     except (RuntimeError, MemoryError, OSError) as error:
