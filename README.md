@@ -278,7 +278,7 @@ trained on the team's own games, in five numbered steps (the sidebar):
 
 The Overview has no "New project" button, although the design had one: a new project would throw away every box the coach has drawn, so starting over is done by hand (move the `data/_training` folder away). See "Training the detector" below for the files and what was tested.
 
-**Coming next** (shown as such on the screens, not built): shots and
+**Coming next** (not built yet): shots and
 possessions found by the tool instead of tagged by hand; a model that finds
 the ball reliably (the first job of Model training); a clip model trained
 from the tagged shots (the Annotate screen only counts them so far);
@@ -1025,7 +1025,7 @@ tried and measured first.
 
 PyTorch CPU build, Ultralytics YOLO, Supervision, OpenCV, scikit-learn, EasyOCR,
 and Gradio (whose FastAPI and uvicorn now serve the dashboard; Gradio itself
-is no longer used), pinned in `requirements.txt`. ffmpeg comes from the
+now serves only the three court click pages), pinned in `requirements.txt`. ffmpeg comes from the
 `imageio-ffmpeg` package, so nothing needs a system install.
 
 ### 2. Model comparison on real game footage
@@ -1166,8 +1166,8 @@ clips/ models/ outputs/ crops/ data/   links to the data folder, not in git
 The five data folders are links to `~/hoops-data` on the laptop's own disk
 (until October 2026 they pointed to `/mnt/d/hoops-tracker` on an SD card,
 which failed), so game videos, model weights and outputs are never
-committed. The two full-game videos are links in `clips/` to the files in the
-Windows Downloads folder, so they are not copied twice. If a folder cannot be
+committed. The two full-game videos are links in `clips/` to the files on an
+external drive, so they are not copied twice. If a folder cannot be
 reached, see "If a data folder cannot be reached" above.
 No game footage, images of players, results or player names are stored in this
 repository: the seasons with their rosters, the teams, the tagged shots, the

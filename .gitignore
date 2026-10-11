@@ -23,7 +23,7 @@
 # Never, even though they would match a rule above
 .venv/
 __pycache__/
-# Links to the SD card (/mnt/d/hoops-tracker): videos, models, outputs, crops, data
+# Links to the data folder outside the repo: videos, models, outputs, crops, data
 clips
 models
 outputs
