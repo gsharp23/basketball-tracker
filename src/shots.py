@@ -8,7 +8,7 @@
 
 The ball cannot be found reliably in the video, so nothing here is detected: the coach
 says when a shot was taken, who took it and whether it went in (on the "Tag shots" screen of the
-dashboard, web/shots.html through api_shots.py, or with --add). The tool then fills in
+dashboard, web/tag.html through api_tag.py, or with --add). The tool then fills in
     the moment      the nearest moment of the video that was looked at (about 10 a second)
     the position    where that player stood, from positions.json; if he has no position
                     just then, the nearest moment within about a second; otherwise the
@@ -173,7 +173,10 @@ def load_teams(video):
             "roster_names": {labels[index]: roster_name for index, (roster_name, _) in matched.items()}}
 
 
-_last_game = {}         # the moments of the game read last. Only one is kept: a full game is big.
+# The moments of the game read last. Only one game is kept, and it is big: about 400 KB for the 20-second test
+# clip, so roughly 60 MB resident (140 MB while parsing) for a 52-minute game. That fits the laptop; a page
+# that asks for a frame's boxes gets them from here instead of re-reading tracks.json each time.
+_last_game = {}
 
 
 def load_moments(video):

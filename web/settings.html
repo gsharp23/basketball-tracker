@@ -4,17 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Settings · Hoops Tracker</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="area-analysis">
 <header class="site-header" id="site-header"></header>
 
 <main class="page">
-  <h1 class="title">Settings</h1>
+  <div class="page-head">
+    <div class="head-text">
+      <a href="index.html" class="back-link">← Start page</a>
+      <h1 class="title">Settings</h1>
+      <div class="subtitle">The school, where the files live, Google Drive and Colab, processing, this season's roster.</div>
+    </div>
+    <div class="head-side">
+      <button class="btn btn-red" id="save-all" type="button">Save settings</button>
+    </div>
+  </div>
 
-  <div class="two-col" style="gap: 28px">
+  <div class="two-col">
     <nav class="side-nav" aria-label="Settings sections" id="side-nav">
       <a href="#school" class="on">School</a>
       <a href="#storage">Storage</a>
@@ -22,95 +31,127 @@
       <a href="#colab">Colab</a>
       <a href="#processing">Processing</a>
       <a href="#roster">Roster</a>
+      <a href="#plays">Play types</a>
       <a href="#about">About</a>
     </nav>
+    <div class="col-main stack" style="gap: 20px">
 
-    <div class="main-col">
-
-      <section id="school" class="card card-pad24">
-        <h2 class="card-title">School</h2>
+      <section id="school" class="card">
+        <div class="card-head"><h2 class="card-title">School</h2><span class="card-note">Kept on this laptop only</span></div>
         <div class="row" style="gap: 20px; align-items: flex-start">
           <div class="drop-zone" id="logo-drop" role="button" tabindex="0" aria-label="Change the logo">
-            <span style="font-weight: 700" id="logo-word">[LOGO]</span>
-            <span>Drop a file to change</span>
+            <span style="font-weight: 700" id="logo-word">LOGO</span>
+            <span>Drop a picture to change</span>
           </div>
           <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden>
           <div class="stack" style="flex: 1 1 260px; gap: 12px">
             <div class="field"><label for="school-name">School name</label><input id="school-name" type="text"></div>
-            <div class="field"><label for="team-name">Team name</label><input id="team-name" type="text"></div>
+            <div class="field"><label for="team-name">Mascot (team name)</label><input id="team-name" type="text"></div>
           </div>
         </div>
-        <div class="small muted">Kept on this laptop only.</div>
       </section>
 
-      <section id="storage" class="card card-pad24" style="gap: 14px">
-        <div class="card-row">
+      <section id="storage" class="card">
+        <div class="card-head middle">
           <h2 class="card-title">Storage</h2>
           <span class="chip chip-grey" id="storage-chip">Checking...</span>
         </div>
-        <div class="progress-row"><span style="font-weight: 600" id="storage-name">Data folder</span><span class="muted" id="storage-used"></span></div>
+        <div class="bar-row"><span class="bar-label" id="storage-name">Data folder</span><span class="muted" id="storage-used"></span></div>
         <div class="progress progress-dark"><span id="storage-bar"></span></div>
         <div class="hint" id="storage-hint">Videos, results and pictures are kept in this folder on the laptop's own drive. The bar is the drive it is on.</div>
       </section>
 
-      <section id="drive" class="card card-pad24">
-        <div class="card-row">
+      <section id="drive" class="card">
+        <div class="card-head middle">
           <h2 class="card-title">Google Drive</h2>
-          <span class="chip chip-grey">Not connected</span>
+          <span class="chip chip-grey" id="drive-chip">Not connected</span>
         </div>
-        <div class="note">Drive carries videos to Colab for fast processing, and brings results and trained models back.</div>
-        <div class="row" style="gap: 14px">
-          <button class="btn btn-red btn-big" id="drive-connect" type="button">Connect Google Drive</button>
-          <span class="chip chip-blue">Coming next</span>
-          <span class="small muted">Opens Google's own sign-in. No password is typed here.</span>
+        <div class="note">Drive carries videos to Colab for fast processing, and brings results and trained models back. Google Drive for desktop keeps the Drive folder on this computer; type where it is.</div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="drive-path">Drive folder on this computer</label>
+            <input id="drive-path" type="text" placeholder="G:\My Drive\Hoops Tracker">
+          </div>
+          <div class="field">
+            <label for="drive-folder">Its name inside Drive</label>
+            <input id="drive-folder" type="text">
+          </div>
         </div>
-        <div class="field" style="max-width: 420px"><label for="drive-folder">Folder in Drive</label><input id="drive-folder" type="text"></div>
+        <div class="row">
+          <button class="btn btn-outline" id="drive-check" type="button">Check the folder</button>
+          <span class="small muted" id="drive-message"></span>
+        </div>
+        <div id="drive-entries" class="hint" hidden></div>
+        <div id="drive-status" class="hint" hidden></div>
         <label class="check"><input type="checkbox" id="drive-delete">Delete each video from Drive once its results are back</label>
       </section>
 
-      <section id="colab" class="card card-pad24" style="gap: 14px">
-        <div class="card-row">
+      <section id="colab" class="card">
+        <div class="card-head middle">
           <h2 class="card-title">Colab</h2>
-          <span class="row" style="gap: 8px; font-weight: 700; font-size: 15px"><span class="dot dot-grey"></span>Not running</span>
+          <span class="dot-line" id="colab-line"><span class="dot dot-grey"></span>Not running</span>
         </div>
-        <div class="note">Colab is started by hand: open the notebook and press <b>Run all</b>. It then works through whatever is waiting in Drive.</div>
+        <div class="note">Colab is started by hand: open the notebook and press <b>Run all</b>. It then works through whatever is waiting in the Drive folder.</div>
         <div class="row">
-          <a class="btn btn-dark" href="/api/settings/notebook" download="train_ball_model.ipynb">Download the Colab notebook</a>
-          <span class="chip chip-blue">Coming next</span>
+          <a class="btn btn-dark" href="/api/settings/notebook" download="train_detector.ipynb">Download the training notebook</a>
           <span class="small muted">Saves the notebook file on this laptop; upload it at colab.research.google.com.</span>
         </div>
       </section>
 
-      <section id="processing" class="card card-pad24">
+      <section id="processing" class="card">
         <h2 class="card-title">Processing</h2>
         <div class="form-grid">
-          <div class="field"><label for="court-size">Court size</label><select id="court-size"></select></div>
+          <div class="field"><label for="court-size">Court size</label><select id="court-size"></select>
+            <span class="hint">The three-point line is taken as the high-school one (19 ft 9 in) on every court size; a college line is 22 ft 1¾ in, so a shot between the two is counted as a 3 there and can be corrected on the Tag screen.</span></div>
           <div class="field"><label for="run-where">Run new games on</label>
             <select id="run-where">
-              <option value="colab">Colab (about an hour; coming next)</option>
-              <option value="laptop">This laptop (about a day)</option>
+              <option value="laptop">This laptop (about a day per game)</option>
+              <option value="colab">Colab (about an hour, through Drive)</option>
             </select>
           </div>
+          <div class="field"><label for="detector-model">Detector model in use</label><select id="detector-model"></select></div>
         </div>
+        <div class="hint" id="model-hint">The model file in the models folder that finds the players, referees, hoop and ball. A model trained in Model training appears here once its file is in that folder.</div>
         <label class="check"><input type="checkbox" id="make-videos">Make the videos with player boxes and court view</label>
       </section>
 
-      <section id="roster" class="card card-pad24">
-        <div class="card-row">
-          <h2 class="card-title">Roster</h2>
-          <span class="small muted">Names never leave this laptop.</span>
+      <section id="roster" class="card">
+        <div class="card-head middle">
+          <h2 class="card-title">Roster <span class="muted" id="roster-season"></span></h2>
+          <span class="card-note">Names never leave this laptop</span>
         </div>
-        <div class="note">The jersey number and the name of each player. The number reader uses these while it reads a game, so fill them in before processing.</div>
-        <div class="form-grid" id="roster-teams"></div>
+        <div class="note">The jersey number and the name of each player this season. Each season keeps its own roster; change seasons on the Seasons screen.</div>
+        <div class="field" style="max-width: 360px"><label for="roster-team-name">Our team's name</label><input id="roster-team-name" type="text"></div>
+        <div class="table-wrap">
+          <table class="table" id="roster-table">
+            <thead><tr><th style="width: 110px">No.</th><th>Player</th></tr></thead>
+            <tbody id="roster-rows"></tbody>
+          </table>
+        </div>
         <div class="row">
+          <button class="btn btn-light btn-sm" id="roster-add" type="button">Add a row</button>
           <button class="btn btn-outline" id="roster-save" type="button">Save the roster</button>
-          <span class="small muted">Opponents are listed by number only unless you want their names too.</span>
         </div>
       </section>
 
-      <section id="about" class="card card-pad24">
-        <div class="card-row">
-          <div class="stack" style="gap: 4px">
+      <section id="plays" class="card">
+        <div class="card-head middle">
+          <h2 class="card-title">Play types</h2>
+          <span class="card-note">What a possession can be labelled as</span>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="plays-offense">Offense, one per line</label><textarea id="plays-offense" rows="6"></textarea></div>
+          <div class="field"><label for="plays-defense">Defense, one per line</label><textarea id="plays-defense" rows="6"></textarea></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-outline" id="plays-save" type="button">Save the play types</button>
+          <span class="small muted">Possessions already labelled keep their words.</span>
+        </div>
+      </section>
+
+      <section id="about" class="card">
+        <div class="card-head middle">
+          <div class="stack" style="gap: 2px">
             <h2 class="card-title">About</h2>
             <div class="hint">Hoops Tracker · runs on this laptop · names never leave it</div>
           </div>
@@ -118,11 +159,8 @@
         </div>
         <div id="check-results" hidden></div>
       </section>
-
-      <div class="row" style="justify-content: flex-end">
-        <button class="btn btn-green btn-big" id="save-all" type="button">Save settings</button>
-      </div>
     </div>
+
   </div>
 </main>
 <script src="app.js"></script>

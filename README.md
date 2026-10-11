@@ -9,14 +9,17 @@ RAM, WSL Ubuntu), so every design choice trades accuracy against CPU time.
 **Status: stage 1 ("see the players") is written and works on a 20-second test
 clip. It has not been run on a full game yet.** The ball is not tracked
 reliably, so nothing about the ball is worked out automatically (no
-possession, no passes). Shots are tagged by hand by the coach, and everything
-can be done from a dashboard in the web browser (see "The dashboard").
+possession, no passes). Shots are tagged and possessions labelled by hand by
+the coach, and everything is done from a dashboard in the web browser with
+two areas: **Game analysis** (seasons, teams, games, players) and **Model
+training** (teaching the detector on the team's own games). See "The
+dashboard".
 
 Roadmap:
 
 1. See the players: tracking, teams, jersey numbers, court positions, stats. **This is what exists.**
-2. See the ball and events.
-3. Store games and learn from corrections.
+2. See the ball and events. **The training of a better detector exists (Model training); automatic shots and possessions do not.**
+3. Store games and learn from corrections. **Seasons, teams, tagged shots and labelled possessions exist; learning from corrections does not.**
 4. Training suggestions.
 
 ---
@@ -57,8 +60,9 @@ project (see "What is in the repo"). `roster.json` stays in
 the project folder on this computer and is ignored by git. Only the code and
 this description are in git.
 
-The dashboard (see "The dashboard" below) is a front end to all of this: it starts
-the same programs and shows the same files, so nothing has to be typed.
+The dashboard (see "The dashboard" below, which has its own diagram) is a
+front end to all of this: it starts the same programs and shows the same
+files, so nothing has to be typed.
 
 ---
 
@@ -121,42 +125,84 @@ source ~/venvs/hoops-tracker/bin/activate
 python src/dashboard.py --make-shortcut
 ```
 
-**A new game, from start to finish:**
+### Two areas, one start page
 
-1. Copy the video file into the `clips` folder with Windows Explorer ("Add a
-   game" on the Games screen shows the folder, as a `\\wsl.localhost\...`
-   path that Explorer opens). Press Refresh: the game appears as a card. A
-   video may also be a link in `clips/` to a file kept elsewhere on the laptop
-   (the two full games are links into the Downloads folder); the dashboard
-   follows the link.
-2. Fill in the roster on the Settings screen, if you have the numbers and
-   names. Best before step 3, because the number reader uses the roster while
-   it reads the game.
-3. Press "Run here" on the card. It finds the players, the teams and the
-   jersey numbers (many hours for a full game), and then waits for the court.
-4. Mark the court: the card says "Needs you", and the Court set-up panel at
-   the bottom of the Game results screen opens the three click pages. This can
-   be done while step 3 is still running.
-5. Press "Process this game" there: positions, the court view, the stats.
-6. Look at the Game results screen.
-7. Tag the shots on the Tag shots screen, for the points, the players table
-   and the scoring heat map; label possessions on the Opponent report.
+The start page (`index.html`) is the one door between two separate
+applications. **Game analysis** is for coaching: seasons, teams, games and
+players, in the look of a video platform (dark header, white cards, red
+accent). **Model training** is for the tool itself: teaching the detector to
+find the ball, the referees and the players in the team's own gyms, in the
+look of a labelling tool (charcoal sidebar with five numbered steps, yellow
+accent). Inside either area the header or sidebar has "← Start page" and no
+link to the other area; the Settings cog on the start page opens Settings.
 
-**The seven screens.** The start page has two choices, "View the stats" and
-"Train the model", and the Settings cog. Every other screen has the same
-header (logo, name, Games · Shots · Train · Settings). The game being looked
-at is in the address (`game.html?game=game1`) and is remembered, so the
-screens stay on the same game.
+```mermaid
+flowchart LR
+    start[Start page<br/>index.html] --> analysis
+    start --> training
+    start --> settings[Settings<br/>school, storage, Drive, Colab, processing, roster, play types]
+
+    subgraph analysis [Game analysis]
+        seasons[Seasons] --> season[Season] --> game[Game]
+        games[Games] --> game
+        players[Players]
+        teams[Teams] --> team[Team] --> report[Scouting report]
+        game --> tag[Tag shots and plays]
+    end
+
+    subgraph training [Model training]
+        overview[Overview] --> upload[1 Upload] --> annotate[2 Annotate] --> dataset[3 Dataset] --> models[4 Train · 5 Models]
+    end
+
+    game -- Run here --> pipeline[main.py on this laptop]
+    game -- Run on Colab --> drive[Drive folder<br/>drive_link.py] --> worker[colab_worker.py<br/>on Colab] --> drive --> results[(data, outputs, crops)]
+    pipeline --> results --> analysis
+    dataset -- dataset zip --> drive2[Drive folder<br/>training/] --> notebook[train_detector.ipynb<br/>on Colab] --> drive2 --> models
+    models -- Use this one --> pipeline
+```
+
+### Game analysis
+
+The header is the same on every screen: the school logo, **Seasons · Teams ·
+Games · Players**, a search box and "← Start page". The game, season or team a
+screen is about is in the address (`game.html?game=game1`,
+`season.html?season=2026-27`, `team.html?team=riverside`), so a link can be
+kept or shared between the screens.
 
 | Screen | What it is for |
 |---|---|
-| Start page (`index.html`) | The school's artwork and name from the branding folder, the two choices, and whether the data folders are in place |
-| Games (`games.html`) | One card per video in `clips/`, with a frame of the video, the opponent and date (click "Change the opponent or date"), its length and how far it is: Not started ("Run here" asks first and says how long to expect), Running here (step, how far, time left, Stop), Needs you (the court), Stopped part-way (Carry on), Finished (points, players, shots tagged, "View results"). "Run here" is the button; Colab is shown as a "coming next" chip until that stage is built |
-| Game results (`game.html`) | Our team's game: the four score tiles from the tagged shots, the game video (`tactical.mp4` with the court view, or `tracked.mp4`), the scoring heat map drawn on a half court (team or one player), the players table (points and shots from the tags; time on camera, distance and time in the paint from the stats), "Stats file for Excel" (shows and copies the path of `stats.csv`; the dashboard cannot start Excel itself), the processing card while a run is going (the pipeline's notes in plain words, the raw lines behind "Details"), and the Court set-up panel: the three click pages, folded to one line once the court is marked, with the check pictures on request. "Our team wears" says which jersey colour is us |
-| Opponent report (`opponent.html`) | The other team: their points and shots from the tags, their defense and offense as shares of the possessions the coach labelled by hand ("Pressed after N of M made baskets"), their scoring heat map and areas, their players by number, and the panel where possessions are labelled: watch the video, "Add a possession", say who had the ball, the offense type, the defense faced. Recognising possessions automatically is a later stage |
-| Tag shots (`shots.html`) | Play the video, pause at a shot: every tracked player gets a box; click the shooter, check 2 or 3 points or free throw (worked out from the position), press MADE or MISSED. The list of shots, "Undo last", and a click on a shot to change or delete it. See "Shots and the scoring heat map" |
-| Train the model (`train.html`) | Pick frames from the game, click the ball in each (two clicks: the picture, then the enlarged view), make the zip for Colab, get the notebook, and the list of ball models in `models/`. See "Training a ball detector" |
-| Settings (`settings.html`) | School (name, team name, drop a new logo), Storage (where the data folder is and how full its drive is), Google Drive and Colab (shown as designed, marked "Coming next"), Processing (court size, where to run, whether to make the videos), Roster (jersey number and name per player, kept in `roster.json` on this laptop), About ("Check everything" looks at every file and program the tool needs) |
+| Seasons (`seasons.html`) | One card per season: the record, games, points per game, a small line of the points by game, the last game; "New season" (name, first day, make it the current one, the roster); an "Unassigned" card when games are in no season; the eight most recent games with their state |
+| Season (`season.html`) | One season: the five tiles (Record, Points per game, Allowed per game, Field goals, Threes), **Points by game** (us in red, the opponents in grey; a hollow dot is the points from the tagged shots standing in for a final score that has not been typed), the **season shot map** with the share of points from the paint, threes and free throws, the games table, the leaders. "Add a game" shows the clips folder to copy the video into, then puts the video in a season with its opponent, date, home or away and final score. "Roster": jersey number and name per player of this season. A season that is not the current one can be made current or deleted (its games become Unassigned) |
+| Games (`games.html`) | Every video in the clips folder, grouped by season, with the same rows as the Season screen: Date, Opponent, Result and a status chip, and what to do next: **Open** (finished), **Progress** (running here), **Mark court**, **Carry on** (stopped part-way; "Roster changed" when every step is done and only the stats are older than `roster.json`: Carry on then redoes the stats alone, in seconds), **Run here** or **Run on Colab** (not started), Edit. A game sent to Colab keeps both **Run here** and **Run on Colab** until it is finished (so a game Colab failed on, or whose court files are needed, can be sent again from here), and its status cell offers **Import now** while Colab is done and the results have not been brought back yet. The header's search box filters the rows |
+| Players (`players.html`) | Season totals for every player on the roster: points and shots from the tagged shots, time on camera and distance from the processed games. Click a player for his season shot map, points by area and a game-by-game table |
+| Teams (`teams.html`) | The opponents, built from every labelled possession against them: **Opponents** (this season), **Our team** (our own tendencies, one card per season) or **All seasons**. Each card: games and record, main defense and main offense with their share, how often they press after a made basket, points per game against us, the defense mix. "Add a team" (usually a team is made when an opponent is named on a game). "Compare teams": share of possessions and points per possession for every offense type |
+| Team (`team.html`) | One opponent, the scouting view: **What they run on offense** (share, points per possession, FG%, turnovers per play type; a row plays those possessions on the Game screen), **How they defend us** (share, our points per possession, our turnovers), when they press and what came of it, **Where they score** (team or one number), **Their players** by jersey number with a note the coach types, the games against them. "Scouting report (PDF)" opens `report.html`, a print-friendly sheet of the same numbers ("Print or save as PDF" is the browser's print dialog). "Label possessions" opens the latest game in Plays mode |
+| Game (`game.html`) | One game the way a video platform shows it. The **video** (the game file itself; the tool's check video `tracked.mp4`, which carries tracking IDs and the pipeline's "ball?" guesses, stands in only when the browser cannot play the game file) with the **possession timeline** under it: one block per labelled possession (red ours, grey theirs scored, pale a turnover; the tagged shots as dots when nothing is labelled yet), Q1–Q4 as equal parts of the video, "Only made shots" and "Only presses" play those clips one after another; a link such as `game.html?game=game1&playlist=fast-break` starts a playlist. The **live court** follows the video, one dot per player from `positions.json` (a moment with no position for anyone is a gap in that file, feet out of the picture or no court mapping there, and the panel under the court says so); click a dot to follow one player (speed now, nearest defender, sprints, distance). The tiles (points tagged, field goals, threes, free throws, turnovers), the **players table** (a number plays that player's shots), the **scoring heat map** (team or one shooter). The line under the title holds the small links that set the final score, "we wear" (which jersey colour group is us) and, for a game with no opponent yet, "Name the opponent". Below: the processing card while a run is going, and the **Court set-up** panel with the three click pages (with **Run on Colab** for a game that is on Colab, to send the court files) |
+| Tag shots and plays (`tag.html`) | **Shots**: play the video, pause at a shot, every tracked player gets a box; click the shooter (or type the team and number), 2 or 3 points or free throw is worked out from the position and can be changed, press MADE or MISSED. The list of shots, "Undo last", click a shot to change or delete it. **Plays**: "Add possession", Start and End take the video's time (keys S and E; Space plays and pauses), who had the ball, the offense run and the defense faced (the play types from Settings, editable in place), scored / missed / turnover, points (counted from the tagged shots unless typed), a note. See "Shots and the scoring heat map" |
+| Settings (`settings.html`) | School (name, team name, drop a new logo), Storage, **Google Drive** (the Drive folder on this computer, "Check the folder", what is in it, delete each video from Drive once its results are back), **Colab** (the training notebook to download, the last word from the Colab worker), Processing (court size, run new games on this laptop or Colab, the **detector model in use**, make the videos), the **Roster** of the current season, the **Play types** (one per line, offense and defense), About ("Check everything" looks at every file and program the tool needs) |
+
+**A new game, from start to finish:**
+
+1. Copy the video file into the `clips` folder with Windows Explorer ("Add a
+   game" on the Season or Games screen shows the folder as a
+   `\\wsl.localhost\...` path that Explorer opens). A video may also be a link
+   in `clips/` to a file kept elsewhere on the laptop.
+2. "Add a game": choose the video, the season, name the opponent (a new name
+   makes a team on the Teams screen), home or away, the date; the final score
+   can be typed now or later.
+3. Fill in the roster (Settings, or "Roster" on the season) if you have the
+   numbers and names, best before step 4.
+4. **Run here** on the game's row: it finds the players, the teams and the
+   jersey numbers (many hours for a full game), and then waits for the court.
+   Or **Run on Colab**: the video goes into the Drive folder and Colab does the
+   same work in a fraction of the time (see "Running a game on Colab").
+5. Mark the court: the row says "Needs the court marked", and the Court set-up
+   panel at the bottom of the Game screen opens the three click pages. This can
+   be done while step 4 is still running.
+6. "Process this game" there: positions, the court view, the stats.
+7. Open the game, tag the shots and label the possessions ("Tag shots and
+   plays"). The season, the players and the opponent's team page fill
+   themselves from that.
 
 Good to know:
 
@@ -167,15 +213,14 @@ Good to know:
   on, and the page finds it again. The black window (or the terminal the
   dashboard was started in) must stay open.
 - **The click pages get their own address.** A click page takes the first
-  free port from 7860 upward (normally 7861, as the dashboard has 7860); it opens in a new
-  browser tab and the Court set-up panel shows the link too. One click page
-  at a time; its clicks are saved only by its own "Save and close". The
-  panel's "Close without saving" button ends the page from the dashboard
-  (clicks made on it are lost).
-- **Saving the roster** only writes `roster.json` when something changed.
-  After a change, a finished game says "The roster was changed after the
-  stats were made" and its "Carry on" redoes the stats step only (seconds),
-  because the stats are made from the roster.
+  free port from 7860 upward (normally 7861); it opens in a new browser tab
+  and the Court set-up panel shows the link too. One click page at a time;
+  its clicks are saved only by its own "Save and close".
+- **Names come from the season's roster.** Every screen shows a name only for
+  a player whose team and number were read. The pipeline's jersey reader and
+  `stats.csv` still read `roster.json` in the project folder (see "Player
+  names"); the first time the dashboard starts it copies that file's names
+  into the current season.
 - **If a data folder cannot be reached** when the dashboard starts, every
   screen shows one page that says which folder, where its link points and
   what to do; it works again as soon as the folder is back.
@@ -185,11 +230,59 @@ Good to know:
   laptop can ask.
 - **Some settings are stored, not yet acted on.** The court size is kept, but
   the first click page still asks for it; "Make the videos" is kept, but
-  `main.py` has no option to skip the videos yet; "Run new games on: Colab"
-  and the Google Drive folder wait for the Colab stage. A ball model marked
-  "In use" is a saved choice: the pipeline does not use a ball model yet.
+  `main.py` has no option to skip the videos yet. "Run new games on" is a
+  reminder only: each game's row offers both buttons.
 - **Provisional numbers are labelled.** A game whose court was marked with
-  stand-in clicks (the test clip) says so on every screen that uses positions.
+  stand-in clicks (the test clip) says so on every screen that uses positions:
+  positions, 2-or-3, shot maps, distances and sprints are provisional until
+  the court is marked by hand.
+
+### Seasons, teams and games: the data model, in plain words
+
+Everything the coach types lives in small JSON files in the data folder,
+never in git. `src/library.py` reads and writes them and works out every
+number the screens share (`python src/library.py` lists the seasons, the
+teams and every game; `--season 2026-27`, `--team <id>` and `--game <video>`
+print what a screen gets).
+
+| File | What it holds |
+|---|---|
+| `data/_library/seasons.json` | The seasons: name, first day, which one is current (exactly one), and each season's **roster** (our team's name, jersey number and name per player). Names are kept here only |
+| `data/_library/teams.json` | The opponents: name, a short code, a colour, and the coach's notes per jersey number ("Goes left"). Our own team is not a row |
+| `data/<video>/game_info.json` | What the coach said about one game: its season, the opponent, the date, home or away, which detected colour group is us, the final score, where it was processed (laptop or Colab), the gym's conditions |
+| `data/<video>/shots.json`, `possessions.json` | The shots tagged and the possessions labelled by hand (see "Shots and the scoring heat map") |
+| `data/_dashboard/play_types.json` | The offense and defense play types a possession can be labelled with; edited on Settings or in place on the Plays screen |
+| `data/_dashboard/settings.json` | The settings, among them the Drive folder path and the detector model in use |
+| `data/_dashboard/drive.json` | What this laptop remembers about the games sent to Colab |
+| `data/_dashboard/` | Also: the game chosen last, the lengths of the videos, what background jobs printed (`logs/`), and the branding folder. A folder in `data/` whose name starts with `_` is never a game |
+
+Where the numbers come from: the record and the points per game from the
+scores the coach typed (the tagged points stand in, and are marked as such,
+until a score is typed); FG%, threes, the shot maps and the leaders from the
+tagged shots; time on camera and distance from `stats.json` (never "minutes
+played": the camera follows the play); what a team runs from the labelled
+possessions; a game with no season is listed under "Unassigned".
+
+### Model training
+
+The detector that finds players, referees, the hoop and the ball can be
+trained on the team's own games, in five numbered steps (the sidebar):
+
+| Step | Screen | What it does |
+|---|---|---|
+| Overview | `train.html` | The project line (four classes: Ball, Referee, Player, Hoop), the five-step strip with live counts, **dataset health** (labels per class, pictures by condition: good light, dim gym, zoomed out, blurred; "need more" under 150), the next steps |
+| 1 · Upload | `upload.html` | Pictures come from the game videos in the clips folder, processed or not. Tick the games, say how many pictures each (150 by default); the tool spreads them over the whole video by seeking, works out each picture's conditions (dim, blurred, zoomed out) and, with **label assist** on, runs the detector in use to draw first boxes. One game can be kept for testing. The job shows progress and time left |
+| 2 · Annotate | `annotate.html` | The box editor (it can be used while the Upload job is still running label assist: the two never write over each other, an answer saved here is kept): **hard pictures first** (the model was unsure, dim, blurred, small ball), in order, or only unsure. Boxes in class colours, dashed when the model was unsure; drag to move, corners to resize, Delete, draw a new box with B, 1–4 choose the class, a 3× zoom inset follows the pointer. "Looks right · next" (Space), "No ball here" (N), "Can't tell" (S), Undo (Z); a filmstrip of the neighbours. Keys are listed on the buttons |
+| 3 · Dataset | `dataset.html` | Checked pictures become a numbered **version**: train / check / test split (a whole game kept back for the test when there is more than one game; otherwise stretches of the same game, and the page says this is a weaker test), the variations for bad conditions (darker and brighter, motion blur, zoomed out, slight tilt, mirror, colour shift), "Build version N" with progress, the versions table with "Download zip" |
+| 4 · Train · 5 · Models | `models.html` | "1 · Send dataset to Drive" copies the version's zip (and the model to start from) into the Drive folder; "2 · Open Colab and train" opens the notebook; the Colab line says what the notebook last reported; "3 · Bring back" copies a finished model into `models/`. The **score by version** chart and the **models table** (per class, in a dim gym, speed on this laptop; the downloaded models are named in plain words, "Player finder" and "Ball finder", with the file name as the tooltip, and the small general model is listed only while it is the one in use), "Use this one" (the pipeline uses that model from the next run on), "Try on a clip" (runs the model over the test clip and measures frames per second), "Where it still struggles" |
+
+The Overview has no "New project" button, although the design had one: a new project would throw away every box the coach has drawn, so starting over is done by hand (move the `data/_training` folder away). See "Training the detector" below for the files and what was tested.
+
+**Coming next** (shown as such on the screens, not built): shots and
+possessions found by the tool instead of tagged by hand; a model that finds
+the ball reliably (the first job of Model training); a clip model trained
+from the tagged shots (the Annotate screen only counts them so far);
+training the referee's signals.
 
 **School branding.** The start page and the header show the school logo, the
 school's name and a piece of artwork. All of that is read while the program
@@ -199,55 +292,58 @@ files it names. That folder is not in git, and nothing in the code or in this
 README says which school it is. Without the folder the dashboard works the
 same and shows the neutral title "Hoops Tracker" and a plain drawn ball.
 
-How it is put together: a small FastAPI server (`src/dashboard.py`, run by
-uvicorn; both came with the earlier Gradio install, so nothing new is
-installed) serves the pages in `web/` as they are (plain HTML, CSS and
-JavaScript, no build step, no framework, no scripts from the internet) and
-answers their JSON requests under `/api/...`. Each screen is one `.html` and
-one `.js` file plus one API module, so the pieces can be read one at a time.
+### How the dashboard is put together
+
+A small FastAPI server (`src/dashboard.py`, run by uvicorn; both came with the
+earlier Gradio install, so nothing new is installed) serves the pages in
+`web/` as they are (plain HTML, CSS and JavaScript, no build step, no
+framework, no scripts from the internet) and answers their JSON requests
+under `/api/...`. Each screen is one `.html` and one `.js` file; one API
+module serves each group of screens, and the logic they share has no web code
+in it, so the pieces can be read one at a time. The look of both areas is in
+one stylesheet, `web/app.css`, taken from the approved design.
 
 | File | What it is |
 |---|---|
-| `src/dashboard.py` | The server: the pages, `/files/...`, the shortcut, the "data folder not found" page, starting and stopping |
-| `src/dash_common.py` | What the API modules share: the list of games with the state of each stage, the chosen game, settings, roster, branding, storage, and the background jobs (processing and the click pages, their logs in `data/_dashboard/logs/`) |
-| `src/dash_api.py` | The shared routes (`/api/games`, `/api/jobs`, `/api/settings`, `/api/roster`, `/api/branding`); its docstring is the contract the screens follow |
-| `src/api_games.py`, `src/api_shots.py`, `src/api_opponent.py`, `src/api_train.py`, `src/api_settings.py` | One module per screen. The logic behind them is in `src/shots.py` (shots, points, 2 or 3, the heat map pictures), `src/possessions.py` (possessions and the opponent report) and `src/ball_labels.py` (frames, labels, the zip) |
-| `web/app.css`, `web/app.js` | The shared look (the colours and fonts of the approved design) and the shared JavaScript: fetching, the header, messages, the half-court drawing, formatting |
-| `web/index.html`, `games.html`, `game.html`, `opponent.html`, `shots.html`, `train.html`, `settings.html` and their `.js` | The seven screens |
-| `data/_dashboard/` | The dashboard's own working folder: the game chosen last, the settings, what background jobs printed (`logs/`), the lengths of the videos, and the branding folder. A folder in `data/` whose name starts with `_` is never a game |
-| `data/<video>/game_info.json` | What the coach said about a game: the opponent, the date, which team is ours |
-| `data/<video>/possessions.json` | The possessions labelled on the Opponent report |
+| `src/dashboard.py` | The server: the pages, `/files/...`, the shortcut, the "data folder not found" page, starting and stopping. It includes `dash_api.py`, `api_settings.py` and each screen module below if its file exists |
+| `src/dash_common.py` | What the API modules share: the list of games with the state of each stage, settings, branding, storage, and the background jobs (processing, the click pages, picking pictures, the speed test; their logs in `data/_dashboard/logs/`) |
+| `src/dash_api.py` | The shared routes (games, seasons, teams, play types, settings, jobs, branding); its docstring is the contract the screens follow |
+| `src/library.py` | The data model above and every number the screens share |
+| `src/api_seasons.py` | Seasons, Season, Games and Players |
+| `src/api_teams.py` | Teams, Team and the scouting report |
+| `src/api_game.py` | The Game screen: the summary, the positions table the live court follows, the court set-up |
+| `src/api_tag.py` | Tag shots and plays, with the logic in `src/shots.py` (shots, points, 2 or 3) and `src/possessions.py` (possessions, what a team runs) |
+| `src/api_training.py` | Overview, Upload and Annotate, with the logic in `src/training_data.py` (pictures, boxes, conditions, label assist) |
+| `src/api_models.py` | Dataset, Train and Models, with the logic in `src/training_versions.py` (versions, the zip, the speed test) |
+| `src/api_drive.py` | The Google Drive link, with the logic in `src/drive_link.py` |
+| `src/api_settings.py` | The Settings screen's own routes (school, logo, "Check everything", the notebook) |
+| `web/app.css`, `web/app.js` | The shared look and the shared JavaScript: fetching, the header and the sidebar, messages, the half-court drawing, formatting, watching a job |
+| `web/game_rows.js` | A game's row with its status and buttons, "Run here", "Run on Colab" and the "Add a game" panel, shared by the Season and Games screens |
+| `web/team_parts.js` | The tables of the Team screen, shared with the scouting report |
+| `web/*.html` and `.js` | The screens: `index`, `seasons`, `season`, `games`, `players`, `teams`, `team`, `report`, `game`, `tag`, `settings`; `train`, `upload`, `annotate`, `dataset`, `models` |
 
 What was tested, and what was not:
 
 - Every screen was opened on the test clip at three screen widths (1440,
-  1280 and a phone's 390) in a browser driven by a program, with no errors
-  in the browser's console, and the links between the screens were followed.
-- The flows were walked by that program with real mouse clicks: the start
-  page to Games, "Process this game" on the already finished test clip
-  (every step "already done", finished in ten seconds), Game results, Tag
-  shots, the Opponent report; and, on a scratch copy of the data so that
-  nothing invented reaches the real folders: tagging a shot, labelling a
-  possession, picking frames and labelling two, saving a setting and the
-  roster.
-- After the data moved to the laptop's disk: the two full games (links in
-  `clips/`) open from every screen and play through `/files`; the Windows
-  paths shown are `\\wsl.localhost\...` ones; saving an unchanged roster
-  leaves a finished game finished; a click page opened and then closed from
-  the panel left its files untouched. Checked with the API and with
-  screenshots of each screen, not by a person.
-- **No person has used it yet.** The shortcut's two commands were run, but
-  the shortcut itself has not been double-clicked.
-- **No full game has been processed from it.** The time it quotes for a full
-  game is the estimate under "Limitations", scaled by the length of the video.
-- **Speed depended on the SD card** while the data was on one: the pages
-  themselves are quick (a paused moment on Tag shots is one small answer,
-  under 50 ms), but the card stalled for tens of seconds at a time when other
-  programs were reading it heavily. The data is now on the laptop's own
-  disk, which has not been measured the same way.
-- **After the SD card failed** (file-system corruption, October 2026) the
-  data folders were moved to the laptop's own disk and the results are being
-  made again; the two full games have not been processed since.
+  1280 and a phone's 390) in a headless browser driven by a program, with no
+  errors in the browser's console, and the links between the screens were
+  followed (the 390 check was repeated after the last round of fixes: no
+  screen is wider than the phone). Each screen was compared by eye with its
+  design. At 1280 by 720 the start page's footer and the Game screen's
+  timeline stay in view, and the models table fits without scrolling; a
+  table that is still wider than its card (the Players screen's game-by-game
+  table) has a scrollbar drawn under it.
+- The flows were walked by that program, with real mouse clicks and through
+  the API, on a scratch copy of the data so that nothing invented reaches the
+  real folders: a new season, the test clip put in a season with an opponent
+  and a final score, shots tagged and possessions labelled, the Game, Team
+  and scouting report screens filled from them, ten training pictures picked
+  with label assist, pictures checked in the box editor, a dataset version
+  built, "Try on a clip" with the downloaded model, the game sent to a
+  stand-in Drive folder and results brought back from a simulated Colab.
+- **No person has used it yet**, no full game has been processed from it, and
+  nothing has been run on Colab. The times it quotes for a full game are the
+  estimates under "Limitations", scaled by the length of the video.
 
 ---
 
@@ -313,7 +409,7 @@ some point, the file has been spoiled. Delete a damaged data file and run
 The camera view moves, so the tool needs to know where the court is. Steps 1
 to 3 need no player detection, so they can be done before or during the long
 detection run. In the dashboard, the Court set-up panel at the bottom of the
-Game results screen starts these pages.
+Game screen starts these pages.
 From the terminal, each command prints an address like
 `http://127.0.0.1:7860`; open it in the browser. The pages run only on this
 computer.
@@ -354,20 +450,22 @@ steps again for that video.
 
 ### Player names
 
-Fill in the Roster section of the Settings screen (a jersey number and a
-name on each row, for each team), or copy `roster.example.json` to
-`roster.json` and fill in jersey number and name for each team by hand.
-`roster.json` is ignored by git, so names never leave
-this computer; everything works without the file. The stats show a name only
-for a player whose team and number were read, and only when the numbers read
-fit one roster team clearly better than the other (the roster does not say
-which jersey colour a team wears). Jersey reading uses the roster too: when
-both teams are filled in, a number that is on neither counts as half a vote.
-So fill in the roster before a game is processed. For a game that was read
-before the roster was filled in, run `main.py` with `--from jerseys` for that
-to take effect: it reads the numbers again, which takes hours for a full
-game. The dashboard has no button for this on purpose (its "Carry on" and
-"Process this game" only bring the names into the stats, which is quick).
+The dashboard keeps the names in the season's roster (the "Roster" button on
+a season, or the Roster section of Settings for the current season): a
+jersey number and a name per player. The pipeline's jersey reader and
+`stats.csv` still read `roster.json` in the project folder (copy
+`roster.example.json` to `roster.json` and fill in jersey number and name for
+each team by hand); the first time the dashboard starts it copies that
+file's names into the current season. Both files are ignored by git, so
+names never leave this computer; everything works without them. The stats
+show a name only for a player whose team and number were read, and only when
+the numbers read fit one roster team clearly better than the other (the
+roster does not say which jersey colour a team wears; "Our team wears" on
+the Game screen does). Jersey reading uses `roster.json` too: when both
+teams are filled in, a number that is on neither counts as half a vote. So
+fill it in before a game is processed. For a game that was read before the
+roster was filled in, run `main.py` with `--from jerseys` for that to take
+effect: it reads the numbers again, which takes hours for a full game.
 
 ---
 
@@ -376,39 +474,63 @@ game. The dashboard has no button for this on purpose (its "Carry on" and
 The laptop takes a day or two per game. Google Colab lends a graphics card for
 free, and the same pipeline runs there in a fraction of the time (not yet
 measured: no game has been run on Colab so far). The pieces are
-`src/colab_worker.py` (a plain script that works through a Drive folder) and
-`colab/process_games.ipynb` (the notebook that starts it). Nothing in the
-code uploads anything; putting a video in Google Drive is the coach's own step.
+`src/colab_worker.py` (a plain script that works through a Drive folder),
+`colab/process_games.ipynb` (the notebook that starts it) and, on the laptop,
+`src/drive_link.py` (the dashboard's "Run on Colab" and the way results come
+back). Nothing in the code talks to the internet: Google Drive for desktop
+carries the files, and the dashboard only copies them to and from a folder on
+this computer.
 
-**Set up once.** In Google Drive, make a folder `Hoops Tracker` (the name is
-the one settable line at the top of the notebook) with a `models` folder
-inside, and upload `player_detector.pt` from the laptop's models folder into
-it. The worker makes `inbox`, `outbox` and `models/easyocr` by itself.
+**Set up once.** Install Google Drive for desktop, make a folder `Hoops
+Tracker` in Drive, and on the Settings screen type where that folder is on
+this computer (for example `G:\My Drive\Hoops Tracker`); "Check the folder"
+confirms it. The dashboard makes `inbox`, `outbox` and `models` inside it as
+it needs them and copies `player_detector.pt` into `models` with the first
+game. Download `colab/process_games.ipynb` once and keep it in Colab.
 
 **For each game.**
 
-1. Upload the video to `inbox/` (for example `inbox/game3.mp4`).
-2. If the court has been marked on the laptop (see "Mark the court"), upload
-   the four court things from `data/game3/` (`court_setup.json`,
-   `court_calibration.json`, `hoops.json` and the `court_views` folder) to
-   `inbox/game3/`. Without them the worker still does the long stages
-   (detection, teams, jersey numbers) and then waits for the court.
-3. Open `colab/process_games.ipynb` in Colab (from GitHub: File > Open
-   notebook > GitHub, or upload the file), choose the T4 GPU under Runtime >
-   Change runtime type, and press Runtime > Run all. Allow the Drive
-   connection when asked. The last cell runs until it is stopped: it looks in
-   the inbox every minute and processes what it finds, printing the same lines
-   `main.py` prints on the laptop.
-4. What comes back, in `outbox/game3/`: `status.json` (`done`, `failed`,
-   `needs_court` or `running`, with a progress line while it runs), `data/`
-   (every result file: `stats.json`, `stats.csv`, `tracks.json`, ...),
-   `outputs/` (the videos and pictures) and `crops/`. `worker.log` in the
-   Drive folder has everything that was printed. Download `data/game3/` and
-   `outputs/game3/` into the laptop's data folders and the dashboard shows
-   the game as finished.
-5. `needs_court`: mark the court on the laptop, put the court files in
-   `inbox/game3/`, and the worker does the remaining stages the next time it
-   looks (within a minute if it is running, otherwise at the next Run all).
+1. **Run on Colab** on the game's row (Season or Games screen). The video is
+   copied into `inbox/` (the row shows the copy's progress and time left),
+   with the court files when the court has been marked here. Google Drive for
+   desktop uploads it.
+2. Open the notebook in Colab, choose the T4 GPU under Runtime > Change
+   runtime type, and press Runtime > Run all. Allow the Drive connection when
+   asked. The last cell runs until it is stopped: it looks in the inbox every
+   minute and processes what it finds, printing the same lines `main.py`
+   prints on the laptop.
+3. The row follows Colab: "Sent to Drive · waiting for Colab", "On Colab ·
+   57% · reading the jersey numbers", "Done on Colab · bringing the results
+   back". The dashboard looks in `outbox/` every minute and copies a finished
+   game's results into `data/`, `outputs/` and `crops/` by itself (or at once
+   with "Import now" on the row); the row then says "Finished" (a "Back from
+   Colab" chip shows for a moment, until the rows reload). Google
+   Drive brings a folder's files in no set order and `status.json` is the
+   smallest, so an import counts only once every result file the status
+   promises has arrived; until then the row keeps saying "bringing the results
+   back" and the dashboard looks again a minute later. A file that is newer on the laptop is kept,
+   and the coach's own files (shots, possessions, the game's info) are never
+   replaced. With "Delete each video from Drive once its results are back"
+   on (Settings), the video is deleted from the inbox after a finished import;
+   the outbox is never deleted.
+4. `needs_court`: Colab did the long stages without the court. Mark the court
+   on the Game screen and press Run on Colab again (on the game's row, or the
+   button in the Court set-up panel): only the court files go, and the worker
+   finishes the positions and stats the next time it looks. A game Colab
+   failed on keeps its Run on Colab (try again) and Run here buttons.
+5. If Colab goes quiet for 20 minutes while a game is "running", the row says
+   so: the notebook has stopped (the tab closed, or the free session ended);
+   press Run all again and it carries on where it stopped.
+
+Without the dashboard: `python src/drive_link.py` says whether Drive is
+connected and what is in the folder; `--send test`, `--status test`,
+`--import test` and `--poll` do the steps above by hand.
+
+What the worker writes, in `outbox/<game>/`: `status.json` (`done`,
+`failed`, `needs_court` or `running`, with a progress line while it runs),
+`data/` (every result file: `stats.json`, `stats.csv`, `tracks.json`, ...),
+`outputs/` (the videos and pictures) and `crops/`. `worker.log` in the
+Drive folder has everything that was printed.
 
 **Limits.**
 
@@ -418,8 +540,8 @@ it. The worker makes `inbox`, `outbox` and `models/easyocr` by itself.
   to the outbox every minute, and the next Run all carries on where it
   stopped (finished stages are skipped, a half-done one continues).
 - While the video and the results are in Google Drive they sit in the coach's
-  own Google account, under Google's terms. The worker never deletes a video
-  from the inbox; that is for the coach (or later the dashboard) to do.
+  own Google account, under Google's terms. Sending a video there is the
+  coach's own button press each time.
 - The roster never leaves the laptop, so on Colab the numbers are read
   without it (a number that is on neither team counts as a full vote there)
   and the stats have no names. Pressing "Carry on" on the laptop afterwards
@@ -428,6 +550,9 @@ it. The worker makes `inbox`, `outbox` and `models/easyocr` by itself.
 - The code takes the graphics card by itself when there is one
   (`HOOPS_DEVICE=auto` is the default; `HOOPS_DEVICE=cpu` forces the CPU).
   On the laptop there is none, so nothing changes there.
+- The copy into the Drive folder and the once-a-minute look in the outbox are
+  threads inside the dashboard: closing the dashboard mid-copy leaves a
+  half file (`<game>.mp4.part`) that the next Run on Colab replaces.
 
 What was tested, and what was not:
 
@@ -444,10 +569,20 @@ What was tested, and what was not:
   run skipped the three finished stages and finished it in 45 seconds. A
   run with nothing to do exited in 9 seconds. A run cut short by the laptop
   restarting was picked up by the next one.
-- **Nothing has been run on Colab, or on a graphics card.** The notebook's
-  cells, the Drive mount, the installs on Colab's Python, the speed on the
-  T4 and whether the results on the graphics card equal the CPU's have not
-  been tried. A full game has not been run through the worker either.
+- The laptop side was tested against a plain folder standing in for the
+  Drive folder, with `status.json` files written by hand for every state:
+  the copy with progress, the court files sent, a second send that copies
+  nothing, "running" with the percentage and the stage in words, the refusal
+  to import while running, the import of a `done` game (results copied,
+  newer local files kept, the coach's files untouched, the video deleted
+  from the inbox), `needs_court`, `failed`, a stale run, and the dashboard's
+  own once-a-minute import.
+- **Nothing has been run on Colab, or on a graphics card, and no real Google
+  Drive folder has been used** (whether Drive for desktop keeps file times,
+  streaming placeholders, sync delays). The notebook's cells, the Drive
+  mount, the installs on Colab's Python, the speed on the T4 and whether the
+  results on the graphics card equal the CPU's have not been tried. A full
+  game has not been run through the worker either.
 
 ---
 
@@ -505,9 +640,10 @@ shows the whole court, so a player who is out of the picture is not counted.
 
 The ball cannot be found in the video (see the ball experiment below), so the
 tool does **not** detect shots. The coach tags each shot, on the Tag shots
-screen of the dashboard, and the tool adds what it already knows about that
-moment. The logic is in `src/shots.py`, the page in `web/shots.html` and
-`web/shots.js`, its API in `src/api_shots.py`.
+and plays screen of the dashboard, and the tool adds what it already knows
+about that moment. The logic is in `src/shots.py` (and `src/possessions.py`
+for the plays), the page in `web/tag.html` and `web/tag.js`, its API in
+`src/api_tag.py`.
 
 1. Play the video and pause it when a shot is taken (the play button, the
    −5s and +5s buttons, the bar, or the space bar), best just before the
@@ -549,8 +685,8 @@ screen says under the video that the positions, the 2 or 3 worked out from
 them and the scoring heat map are provisional.
 
 Every shot can be changed or deleted (click it in the "Tagged so far" list),
-and "Undo last" takes back the last thing done. The Game results screen
-then shows, for our team, and the Opponent report for theirs:
+and "Undo last" takes back the last thing done. The Game screen then
+shows, for both teams, and the Season, Players and Team screens add up:
 
 - **The score tiles and the players table**: points, field goals, threes and
   free throws made and tried, from the tagged shots; per player next to the
@@ -561,8 +697,8 @@ then shows, for our team, and the Opponent report for theirs:
   top, because a team shoots at one end and then the other. A made shot is a
   dot (bigger for a three), a miss is a cross, and a soft disc round every
   made shot builds up where they cluster; the points by area are listed
-  beside it. "See the scoring heat map" on Tag shots also saves the two
-  pictures below, drawn by `src/shots.py` (these add shading only from 20
+  beside it. The screens draw the map themselves; `src/shots.py` draws the
+  two pictures below from the command line (these add shading only from 20
   made shots on, and write the count on the picture).
 
 In this project "heat map" always means where points were **scored from**.
@@ -572,11 +708,23 @@ The pictures of where players **stood** are the position maps.
 |---|---|
 | `data/<video>/shots.json` | The tagged shots. The fields are described at the top of `src/shots.py`. Each shot has a `source` ("coach"), so a later automatic shot detector can write the same file |
 | `data/<video>/shots_undo.json` | The file as it was before the last change |
-| `outputs/<video>/scoring_heat_map_<team>.png` | The scoring heat map of each team as a picture, redrawn by "See the scoring heat map" and by `shots.py` |
+| `outputs/<video>/scoring_heat_map_<team>.png` | The scoring heat map of each team as a picture, drawn by `shots.py` from the command line |
+| `data/<video>/possessions.json` | The possessions labelled on the Plays side: start and end, who had the ball, the offense run and the defense faced, the outcome (scored, missed, turnover), the points (counted from the shots inside the span unless typed), a note |
 
 Without the dashboard: `python src/shots.py --video clips/game1.mp4` prints
 the shots and the points table and saves the two pictures; `--add`, `--delete`
 and `--undo` change the list (`--help` shows how).
+
+**Plays.** On the Plays side of the same screen the coach marks each
+possession: when it started and ended (the video's time, or the keys S and
+E), who had the ball, the offense run and the defense faced (the play types
+from Settings, editable in place), and what came of it. The tool counts the
+points from the shots tagged inside that span unless a number is typed. From
+these the Team screen works out what an opponent runs (the share of their
+possessions per play type, points per possession, FG%, turnovers), how they
+defend us, how often they press after a made basket and what came of it. The
+Game screen draws the possessions as the clickable timeline under the video.
+Recognising possessions automatically is a later stage.
 
 Limits:
 
@@ -586,6 +734,11 @@ Limits:
   to 2 ft on the test clip, typically 4 to 8 ft off in depth when the legs are
   hidden). So a 2 or 3 worked out near the three-point line can be wrong. A
   shot worked out within 3 ft of the line is marked "check 2 or 3" in the list.
+- **One three-point line.** The line is taken as the high-school one, 19 ft
+  9 in, on every court size, including the "College" choice in Settings (a
+  college line is 22 ft 1¾ in). On a college court a shot between the two
+  lines is counted as a 3 and the three-point landmarks the coach clicks are
+  placed short; the Settings page says so next to the court size.
 - **The position is read from the feet.** Once the shooter is in the air his
   box no longer ends on the floor, which moves the position away from the
   camera. That is why the moment to pick is just before the jump. How much it
@@ -607,95 +760,128 @@ Limits:
 
 ---
 
-## Training a ball detector
+## Training the detector
 
-The models the tool has cannot find the ball (see the ball experiment below).
-The likely fix is a small model trained on frames from the team's own games.
-The "Train the model" area of the dashboard is the first step: collecting
-those frames with the ball marked. The logic is in `src/ball_labels.py`, the
-page in `web/train.html` and `web/train.js` with `src/api_train.py`, and the
-training itself is a notebook for Google
-Colab, `colab/train_ball_model.ipynb`, because the laptop has no graphics card.
+The models the tool has cannot find the ball (see the ball experiment below),
+and were trained on broadcast footage, not gym footage. The fix is a model
+trained on frames from the team's own games, and that is what the **Model
+training** area of the dashboard is for, in the pattern of a labelling tool:
+pictures in, boxes checked, a numbered dataset, a model trained on Colab,
+its score back on the Models screen. The logic is in `src/training_data.py`
+(pictures, boxes, conditions, label assist) and `src/training_versions.py`
+(dataset versions, the zip, the speed test); the screens in `web/train.html`,
+`upload.html`, `annotate.html`, `dataset.html` and `models.html` with
+`src/api_training.py` and `src/api_models.py`; the training itself is a
+notebook for Google Colab, `colab/train_detector.ipynb`, because the laptop
+has no graphics card.
 
-1. **Pick frames** ("This game" card). About 150 frames spread over the
-   whole game are saved as pictures. The video is jumped through, not played,
-   so the game does not have to be processed first. The rule is "always put
-   the next frame in the biggest gap that is left", with at least a second
-   between two frames; asking for a larger number later adds frames in between.
-2. **Label them**, one at a time. Click the ball in the whole picture, then
-   click its middle exactly in the enlarged view that opens in its corner
-   (three times bigger). The whole picture takes two thirds of the page
-   width (about 800 pixels on a 1280-wide screen, so a 30-pixel ball is
-   about 12 pixels there). The answer buttons sit under the picture, so
-   nothing has to be scrolled between frames. A box of a likely size
-   appears; "− Smaller" and "+ Larger" (or the keys) adjust it. Or press
-   "No ball visible" (a useful example: it teaches what is not a ball) or
-   "Can't tell" (never used for training). Every answer is saved at once;
-   the back arrow and "Undo my last answer" correct mistakes. If the game has been
-   processed, the detector's own "ball" box is shown in thin white as a
-   guess that can be accepted with one button. It is often wrong.
-3. **Keep one game for testing** (the switch on the "This game" card). None of that game's frames
-   are used for training, so the scores at the end are from a game the model
-   has never seen. With only one game labelled, stretches of that same game
-   are set aside instead; the page says plainly that this is a weaker test.
-4. **Make the zip** ("From labels to a model", step 2): `ball_dataset_<n>.zip` in the standard
-   Ultralytics YOLO layout (`images/` and `labels/`, each with `train`, `val`
-   and `test`, and a `data.yaml` with the one class "ball"). A "no ball" frame
-   goes in with an empty label file. The notebook is copied next to the zip.
-5. **Train on Colab.** Upload the zip to a Google Drive folder called
-   `hoops-tracker`, open the notebook in Colab, choose the T4 GPU and run all
-   cells. It trains the smallest official model (`yolo11n`, because the laptop
-   that will use it has no graphics card) at a picture size of 1280 (so that a
-   ball about 30 pixels wide in the frame stays about 20 pixels wide), reports
-   precision and recall on the test part, and writes `ball_model_v<n>.pt` and
-   a text file of its scores back to the Drive folder.
-6. **Bring the model back**: put the `.pt` file in `models/`. The "Ball
-   models" card lists the model files and says which one is marked in use.
+1. **Get pictures** (1 · Upload). Tick the games (any video in the clips
+   folder, processed or not) and say how many pictures each (150 by default).
+   The video is jumped through, not played: the pictures are spread over the
+   whole game ("always put the next picture in the biggest gap that is left",
+   at least a second apart). Each picture gets its conditions worked out
+   (dim: the picture is dark; blurred: little sharp detail; zoomed out: the
+   players are small), and with **label assist** on the detector in use draws
+   its first boxes on every picture. The job runs in the background with
+   progress and time left; it waits while a game is being processed, because
+   both need the laptop's whole memory.
+2. **Check them** (2 · Annotate), one at a time. The hard pictures come first
+   (the model was unsure, a dim gym, a blurred picture, a small ball); "In
+   order" and "Only unsure" are the other orders. Fix the boxes (drag, resize
+   at the corners, Delete, draw a new one with B, 1 to 4 for the class) and
+   press "Looks right · next"; "No ball here" removes the ball boxes and
+   counts the picture as checked; "Can't tell" sets it aside, never trained
+   on. Every answer is saved at once; Undo takes it back. Only checked
+   pictures are ever trained on.
+3. **Keep one game for testing** (the radio on Upload, or the checkbox on
+   Dataset). None of that game's pictures are used for training, so the
+   scores at the end are from a game the model has never seen. With only one
+   game checked, stretches of that same game are set aside instead, and the
+   page says plainly that this is a weaker test.
+4. **Build a version** (3 · Dataset): `data/_training/versions/v<n>/dataset.zip`
+   in the standard Ultralytics layout (`images/` and `labels/`, each with
+   `train`, `val` and `test`, a `data.yaml` with the four classes) plus
+   `conditions.csv` (the conditions of every picture, for the per-condition
+   scores) and `version.json` (what went in). The variations ticked (darker
+   and brighter, motion blur, zoomed out, slight tilt, mirror, colour shift)
+   are written into the version and become training settings on Colab. The
+   zip is read back and checked before it gets its name.
+5. **Train on Colab** (4 · Train): "1 · Send dataset to Drive" copies the zip
+   into the Drive folder's `training/` (and the model to start from into
+   `models/` if it is not there) and writes `training/request.json` with the
+   version, the starting model and the length. "2 · Open Colab and train"
+   opens the notebook (or download it and upload it yourself); choose the
+   T4 GPU and run all cells. It takes the newest dataset, trains the small
+   official model (`yolo11n`, because the laptop that will use it has no
+   graphics card) or continues from a model in Drive, at a picture size of
+   1280 (so a ball about 30 pixels wide in the frame stays about 20 pixels
+   wide), reports to `training/status.json` round by round, scores the model
+   on the test pictures per class and per condition, and writes
+   `detector_v<n>.pt` and `detector_v<n>.json` to the Drive folder's
+   `models/`. The Models screen shows the Colab line from `status.json`.
+6. **Bring the model back** (5 · Models): "3 · Bring back" copies the two
+   files into the laptop's `models/`. The models table shows every model's
+   scores (the share of the marked balls, referees, players and hoops it
+   found on the test pictures, at confidence 0.25 and overlap 0.5, so that
+   it can be counted per condition; not Ultralytics' own mAP), "Try on a
+   clip" measures its speed on this laptop, and "Use this one" makes it the
+   detector in use: the pipeline loads it from the next run on, matches its
+   classes by name, and runs it at the picture size it was trained at (a
+   1280 model is about four times slower per frame than the downloaded model
+   at 640).
 
-**Using a ball model when a game is processed is the next stage and is not
-built.** Until then a trained model changes nothing in the stats.
-
-**Privacy.** The frames show the players. Everything above stays on the SD
-card except step 5: uploading the zip to Google Drive means those frames
+**Privacy.** The pictures show the players. Everything above stays on the
+laptop except step 5: sending the zip to Google Drive means those pictures
 leave the laptop and are kept by Google. The tool uploads nothing by itself;
-that step is the coach's decision. A notebook saved with outputs can contain
-pictures, so the guards refuse to commit one until its outputs are cleared.
+that step is the coach's button press each time. A notebook saved with
+outputs can contain pictures, so the guards refuse to commit one until its
+outputs are cleared.
 
 | File | What it is |
 |---|---|
-| `data/_training/frames/<video>/<video>_<frame number>.jpg` | The frames that were picked, full size |
-| `data/_training/labels.json` | The answers: per frame the game, the frame number, the picture size, and "ball" with a box (centre and size in pixels), "no ball" or "skipped"; and which game is kept for testing |
+| `data/_training/project.json` | The four classes and which game is kept for testing |
+| `data/_training/frames/<video>/<video>_<frame number>.jpg` | The pictures that were picked, full size; `thumbs/` holds small copies for the filmstrip |
+| `data/_training/labels.json` | One record per picture: the game, the frame, the picture size, the moment, its status (unchecked, checked, skipped), its boxes (class, centre and size in pixels, whether the model or the coach drew it, the model's confidence), its conditions, and why it is in the hard-pictures queue. A labels file from the earlier ball-only version is migrated |
 | `data/_training/labels_previous.json` | The answers as they were one save earlier, used if the file gets damaged |
-| `data/_training/export/ball_dataset_<n>.zip` | The dataset for training, with the notebook next to it |
+| `data/_training/versions/v<n>/dataset.zip`, `version.json` | The dataset versions |
+| `models/<name>.json` | A model's score card, written by the notebook; "Try on a clip" adds the speed |
 
-Without the dashboard: `python src/ball_labels.py pick --video clips/game1.mp4`,
-`status`, `test-game game3` and `export` do steps 1, 3 and 4.
+Without the dashboard: `python src/training_data.py --video clips/game1.mp4
+--frames 150` picks pictures and runs label assist, `--status` counts them;
+`python src/training_versions.py --build` makes the next version and
+`--try-model detector_v1.pt` runs the speed test.
 
 What was tested, and what was not:
 
-- Picking by jumping gives exactly the frame that reading the video from the
-  start gives (checked on one frame of the test clip). Five frames were taken
-  from a full game that has not been processed. With the laptop quiet, one
-  jump, save and check took about 0.3 seconds (three frames timed), so 150
-  frames should take about a minute; with the laptop busy it was several
-  times slower.
-- With real mouse clicks in a browser driven by a program, the two clicks
-  stored the ball within 2.5 pixels of the spot aimed at (three tries).
-- The first idea of the ball's size was within 4 pixels for 8 of 9 balls on
-  the test clip and 16 pixels off for the ninth (pixels of a 1920-wide frame,
-  where the ball is about 30 wide).
-- On 18 frames of the test clip the detector offered a guess in 11, and 5 of
-  those were the ball.
-- The notebook cannot be run here. Its code cells were run on the laptop
-  instead (without the two Colab-only cells, for one round of training at a
-  small picture size) on a zip of 18 frames made by the Export step: training,
-  the test scores and saving the model file all ran. That proves the steps
-  work together. It says nothing about how good a model will be.
-- **No person has labelled a frame yet, no model has been trained on Colab,
-  and how many labelled frames are needed is not known.** A few hundred with
-  the ball, from more than one game and gym, is the usual starting point.
-- Saving an answer waits for the disk. While a game is being processed the
-  disk is busy, and a click can then take several seconds.
+- On a scratch copy of the data (nothing real written): 10 pictures picked
+  from the 20-second test clip with label assist (3 to 13 player boxes, the
+  hoop, 0 to 3 referees and 0 to 4 ball boxes per picture; three pictures
+  drawn and checked by eye: players, hoop and a referee boxed correctly, the
+  ball found in one, a false "Ball 0.35" on a shoe shown dashed), the
+  pictures checked (one box removed), version 1 built (8 train, 1 check, 1
+  test), "Try on a clip" with the downloaded model (2.1 frames a second at
+  640 wide), "Use this one" switching the detector and back.
+- The box editor was driven with mouse events in a headless browser:
+  selecting, moving and resizing a box, Delete, drawing with B, changing a
+  class with the number keys, Space, Undo, "No ball here", "Can't tell".
+- The condition thresholds (dim, blurred, zoomed out) were calibrated on
+  altered copies of test-clip frames, not on real footage of those
+  conditions, so they may need adjusting on real gyms.
+- The notebook's code cells were run on the laptop (without the two
+  Colab-only cells, for one round of training at a small picture size, from
+  the small official model) on a version built from 23 test-clip pictures:
+  unpacking, the variations, training with the round-by-round status, the
+  scoring per class and per condition and the save all ran, in 92 seconds,
+  and the score card came out in the shape the Models screen reads. The
+  scores were 0% after one round, as expected: that proves the plumbing,
+  not a model.
+- Detection with the changed loader gave a `tracks.json` byte-for-byte equal
+  to the earlier one for the test clip, so the default model's results are
+  unchanged.
+- **No person has checked a picture yet, no model has been trained on Colab,
+  and how many checked pictures are needed is not known.** A few hundred
+  with the ball, from more than one game and gym, is the usual starting
+  point.
 
 ---
 
@@ -828,6 +1014,12 @@ tried and measured first.
    fixes were followed by a second from-scratch run (section 5).
 7. **Privacy guards.** Before anything was published, the repository was set
    up so that only code and text can be committed (section 6).
+8. **The dashboard, twice.** A first dashboard put every command behind a
+   button on seven plain screens. A second design was then approved (two
+   areas, the look of a video platform and of a labelling tool) and the
+   dashboard was rebuilt to it screen by screen, each screen compared with
+   its design in a browser driven by a program, on scratch copies of the
+   data.
 
 ### 1. Environment (CPU only)
 
@@ -955,14 +1147,15 @@ names may reach GitHub.
 ## What is in the repo
 
 ```
-src/                  the pipeline (main.py runs it all), and the dashboard:
-                      dashboard.py, dash_common.py, dash_api.py, api_*.py,
-                      with the logic in shots.py, possessions.py, ball_labels.py
+src/                  the pipeline (main.py runs it all) and the dashboard:
+                      dashboard.py, dash_common.py, dash_api.py, library.py, api_*.py,
+                      with the logic in shots.py, possessions.py, training_data.py,
+                      training_versions.py and drive_link.py
 web/                  the dashboard's screens: plain HTML, CSS and JavaScript
                       (text only; no picture may be kept here, see .githooks)
 colab/                the two Google Colab notebooks: process the games there
                       (process_games.ipynb, run by src/colab_worker.py) and
-                      train a ball model (train_ball_model.ipynb)
+                      train the detector (train_detector.ipynb)
 experiments/          one-off test scripts behind the two experiments above
 roster.example.json   blank template: jersey number -> player name
 requirements.txt
@@ -977,7 +1170,8 @@ committed. The two full-game videos are links in `clips/` to the files in the
 Windows Downloads folder, so they are not copied twice. If a folder cannot be
 reached, see "If a data folder cannot be reached" above.
 No game footage, images of players, results or player names are stored in this
-repository.
+repository: the seasons with their rosters, the teams, the tagged shots, the
+training pictures and the dashboard's settings all live under `data/`.
 
 ---
 

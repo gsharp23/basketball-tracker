@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Train and models · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* This screen only: the training card's two halves and the chart's colours. */
+  .train-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 20px; }
+  .train-form { flex: 1 1 320px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .train-form .row { align-items: flex-end; }
+  .train-form .field { flex: 1 1 180px; }
+  .train-buttons { display: flex; flex-direction: column; gap: 10px; flex: 0 1 280px; min-width: 240px; }   /* a long Colab line wraps; the buttons stay on the right */
+  .train-buttons .btn { justify-content: center; }
+  .train-buttons .dot-line { align-items: flex-start; }
+  .train-buttons .dot-line .dot { margin-top: 5px; }
+  .legend .mark-ball { background: var(--red); }
+  .legend .mark-ref { background: #4fa3ff; }
+  .legend .mark-player { background: var(--ink); }
+  .callout.callout-row { gap: 12px; }
+  .callout .push { font-weight: 700; }
+  .table td.score { font-weight: 700; white-space: nowrap; }     /* "61%" never breaks in two */
+  .table .small-link { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .table .stack { align-items: flex-start; }
+  .table td.model { white-space: nowrap; }      /* the date and the speed may wrap, so the table fits a 1280 screen */
+</style>
+</head>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+
+    <div class="page-head">
+      <div class="head-text">
+        <h1 class="title title-compact">Train and models</h1>
+        <div class="subtitle">Training runs on Google Colab's free GPU. The finished model comes back here with its score on the test game.</div>
+      </div>
+    </div>
+
+    <section class="card train-card" id="train">
+      <div class="train-form">
+        <h2 class="card-title">Train a new model</h2>
+        <div class="row">
+          <div class="field"><label for="dataset-version">Dataset</label><select id="dataset-version"></select></div>
+          <div class="field"><label for="start-from">Start from</label><select id="start-from"></select></div>
+          <div class="field"><label for="length">Length</label>
+            <select id="length">
+              <option value="normal">Normal (about 1 hour)</option>
+              <option value="long">Long (about 3 hours)</option>
+            </select>
+          </div>
+        </div>
+        <div class="small muted">Step 1 sends the dataset zip to your Drive. Step 2 opens Colab, where you press Run all. The rest is automatic.</div>
+        <div id="send-status" hidden></div>
+      </div>
+      <div class="train-buttons">
+        <button class="btn btn-red btn-big" id="send-button" type="button">1 · Send dataset to Drive</button>
+        <a class="btn btn-dark btn-big" id="colab-link" href="#" target="_blank" rel="noopener">2 · Open Colab and train</a>
+        <div class="small muted" style="text-align: center">or <a href="/api/models/notebook" id="notebook-link" download="train_detector.ipynb">download the notebook</a> to upload it yourself</div>
+        <div class="dot-line" id="colab-line"><span class="dot dot-grey"></span>Colab: not running</div>
+        <div id="bring-back" class="stack" hidden></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 class="card-title">Score by version</h2>
+        <span class="card-note" id="chart-note">Share of the marked balls, referees and players each model found on the test pictures</span>
+      </div>
+      <svg class="chart" id="chart" viewBox="0 0 760 220" role="img" aria-label="Score per model version for ball, referee and player"></svg>
+      <div class="legend">
+        <span><span class="mark mark-ball"></span>Ball</span>
+        <span><span class="mark mark-ref"></span>Referee</span>
+        <span><span class="mark mark-player"></span>Player</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Models</h2>
+      <div class="table-wrap">
+        <table class="table" style="min-width: 900px">
+          <thead>
+            <tr><th>Model</th><th>Trained</th><th>Dataset</th><th>Ball</th><th>Ball, dim gym</th><th>Referee</th><th>Player</th><th>Hoop</th><th>Speed on laptop</th><th></th></tr>
+          </thead>
+          <tbody id="model-rows"></tbody>
+        </table>
+      </div>
+      <div class="small muted" id="try-status" hidden></div>
+      <div class="callout callout-row" id="struggles" hidden>
+        <span style="font-weight: 700">Where it still struggles:</span>
+        <span id="struggles-words"></span>
+        <a href="annotate.html" class="push" id="struggles-link">Label more pictures →</a>
+      </div>
+      <div class="small muted">"Found" is the share of the things marked in the test pictures that the model drew a box on. A score from a handful of test pictures means little; the test game is kept out of training so the score is honest.</div>
+    </section>
+
+  </main>
+</div>
+<script src="app.js"></script>
+<script src="models.js"></script>
+</body>
+</html>

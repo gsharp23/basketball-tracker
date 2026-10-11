@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dataset · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* This screen only: the two-column checklist and the split bar's three colours. */
+  .words { font-size: 14px; color: var(--muted); }
+  .words b { color: var(--ink); }
+  .variations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .split-bar.tall > .part-train { background: var(--ink); }
+  .split-bar.tall > .part-val { background: var(--muted); }
+  .split-bar.tall > .part-test { background: var(--red); }
+  .split-bar.tall > div { flex-basis: 76px; min-width: 88px; }     /* a small part still shows its words ("Check 10%") */
+  #test-game-field { max-width: 420px; }
+  @media (max-width: 560px) { .variations { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+
+    <div class="page-head">
+      <div class="head-text">
+        <h1 class="title title-compact">Dataset</h1>
+        <div class="subtitle">Checked pictures become a numbered version the model trains on. Each version is kept, so a score always points to the exact pictures behind it.</div>
+      </div>
+      <div class="head-side">
+        <button class="btn btn-dark" id="build-button" type="button">Build version</button>
+      </div>
+    </div>
+
+    <div class="two-col two-col-even stretch">
+      <section class="card col-main">
+        <h2 class="card-title">Split</h2>
+        <div class="split-bar tall" id="split-bar" aria-label="How the checked pictures are shared out">
+          <div class="part-train" style="flex: 70">Train 70%</div>
+          <div class="part-val" style="flex: 15">Check 15%</div>
+          <div class="part-test" style="flex: 15">Test 15%</div>
+        </div>
+        <div class="words" id="split-words">Reading the checked pictures...</div>
+        <label class="check"><input type="checkbox" id="keep-game">Keep one whole game for testing</label>
+        <div class="field" id="test-game-field" hidden>
+          <label for="test-game">Which game is kept aside</label>
+          <select id="test-game"></select>
+          <span class="hint">None of its pictures are used for training, so the score is an honest one on a game the model has never seen.</span>
+        </div>
+      </section>
+
+      <section class="card col-side">
+        <div class="card-head">
+          <h2 class="card-title">Variations for bad conditions</h2>
+          <span class="card-note">Each picture also shown changed</span>
+        </div>
+        <div class="variations" id="variations"></div>
+        <div class="small muted" id="pictures-line"></div>
+      </section>
+    </div>
+
+    <section class="card" id="build-card" hidden>
+      <div class="card-head middle">
+        <h2 class="card-title-small" id="build-title">Building the version...</h2>
+        <span class="small muted" id="build-left"></span>
+      </div>
+      <div class="progress progress-dark progress-thick"><span id="build-bar"></span></div>
+      <div class="small muted" id="build-detail"></div>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Versions</h2>
+      <div class="table-wrap">
+        <table class="table" style="min-width: 760px">
+          <thead>
+            <tr><th>Version</th><th>Built</th><th>Pictures</th><th>Games · gyms</th><th>Variations</th><th>Trained model</th><th></th></tr>
+          </thead>
+          <tbody id="version-rows"></tbody>
+        </table>
+      </div>
+      <div class="small muted" id="versions-empty" hidden>No version built yet. Check pictures on <a href="annotate.html">2 · Annotate</a>, then press "Build version 1".</div>
+      <div class="small muted">A version's zip is what goes to Colab. Sending it to your Google Drive is a choice you make each time; the pictures show players.</div>
+    </section>
+
+  </main>
+</div>
+<script src="app.js"></script>
+<script src="dataset.js"></script>
+</body>
+</html>

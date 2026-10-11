@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tag shots and plays · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+/* The Tag shots and plays screen only. Everything shared is in app.css. */
+.period-row { display: flex; align-items: center; gap: 10px; }
+.period-row .segment > button { min-width: 44px; justify-content: center; }
+.watch { display: flex; flex-direction: column; gap: 10px; }
+.stage { position: relative; aspect-ratio: 16 / 9; background: var(--dark-pane); border-radius: 10px; overflow: hidden;
+         color: #9a9aa0; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: var(--dark-pane); }
+.stage-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 10px 16px;
+              background: rgba(14, 14, 16, 0.75); color: #ffffff; border-radius: 8px; pointer-events: none; max-width: 80%; }
+.boxes { position: absolute; inset: 0; }
+/* A player box over the paused picture. Sizes are percentages of the picture, so they follow it at any width. */
+.pbox { position: absolute; border: 2px solid #ffffff; opacity: 0.7; border-radius: 3px; cursor: pointer; background: transparent; padding: 0; }
+.pbox:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+.pbox.chosen { border-color: var(--red); opacity: 1; }
+.pbox .tagline { position: absolute; left: -2px; bottom: 100%; margin-bottom: 2px; background: rgba(20, 26, 36, 0.85); color: #ffffff;
+                 font-weight: 800; font-size: 13px; line-height: 1; padding: 3px 7px; border-radius: 3px; white-space: nowrap; }
+.pbox.chosen .tagline { background: var(--red); font-size: 15px; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.jump { min-width: 44px; min-height: 44px; background: var(--bg); border: 0; border-radius: 8px; font-weight: 700; font-size: 14px; }
+.jump:hover { background: var(--line); }
+.play { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--header); color: #ffffff; display: flex; align-items: center; justify-content: center; }
+.play:hover { background: #2b303a; }
+/* Plays mode: the possessions along the video, as the Game screen draws them */
+.strip { position: relative; height: 22px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.strip > button { position: absolute; top: 0; height: 100%; min-width: 3px; border: 0; padding: 0; border-radius: 3px; background: var(--line-strong); cursor: pointer; }
+.strip > .ours { background: var(--red); }
+.strip > .theirs-scored { background: var(--mid); }
+.strip > .turnover { background: var(--red-pale); }
+.strip > .on { outline: 2px solid var(--header); outline-offset: -2px; }
+.strip > .now { position: absolute; top: 0; width: 2px; height: 100%; background: var(--header); pointer-events: none; }
+.side { display: flex; flex-direction: column; gap: 16px; }
+/* Shots mode: the shooter card */
+.shooter { display: flex; align-items: center; gap: 14px; }
+.shooter-number { width: 64px; height: 64px; flex: none; border-radius: 12px; background: var(--header); color: #ffffff; display: flex;
+                  align-items: center; justify-content: center; font-family: var(--font-condensed); font-style: italic; font-weight: 800; font-size: 40px; }
+.shooter-number.empty { background: var(--bg); color: var(--muted); }
+.shooter-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shooter-name { font-size: 20px; font-weight: 700; }
+.typed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.typed .segment { padding: 3px; }
+.typed .segment > button { min-height: 36px; padding: 0 12px; }
+.typed .segment > button, #f-team > button { gap: 6px; }       /* room between the colour dot and the name */
+.typed input { width: 80px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 16px; font-weight: 700; }
+.team-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); display: inline-block; flex: none; }
+.kind-row { display: flex; gap: 8px; }
+.kind-row > button { flex: 1; min-height: 46px; background: var(--bg); color: var(--ink); border: 2px solid transparent; border-radius: 8px; font-weight: 700; font-size: 16px; }
+.kind-row > button.on { background: var(--card); border-color: var(--ink); }
+.result-row { display: flex; gap: 12px; }
+.result-row > button { flex: 1; min-height: 72px; border-radius: 12px; font-family: var(--font-condensed); font-style: italic; font-weight: 800; font-size: 34px; }
+.made { background: var(--green-bright); color: #ffffff; border: 0; }
+.made:hover { background: #27854d; }
+.missed { background: var(--card); color: var(--ink); border: 3px solid var(--ink); }
+.missed:hover { background: var(--bg); }
+.result-row > button:disabled { opacity: 0.55; cursor: default; }
+/* the two lists */
+.tagged { display: flex; flex-direction: column; }
+.shot-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.shot-row:last-child { border-bottom: 0; }
+.shot-row .dot-made { width: 12px; height: 12px; border-radius: 50%; background: var(--green-bright); flex: none; }
+.shot-row .dot-missed { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); flex: none; }
+.shot-row .who { font-weight: 800; width: 30px; flex: none; }
+.shot-row .what { flex-grow: 1; }
+.when { color: var(--muted); font-size: 15px; background: none; border: 0; padding: 0; text-decoration: underline dotted; cursor: pointer; }
+.when:hover { color: var(--red-dark); }
+.shot-row.open { border-bottom: 0; }
+.shot-edit { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.shot-edit .segment { padding: 3px; }
+.shot-edit .segment > button { min-height: 36px; padding: 0 12px; }
+.shot-edit select { width: auto; min-height: 36px; padding: 0 8px; }
+.undo { min-height: 40px; padding: 0 10px; background: transparent; border: 0; font-weight: 700; font-size: 15px; color: var(--ink); text-decoration: underline; }
+.undo:disabled { color: var(--mid); text-decoration: none; cursor: default; }
+.poss-list { display: flex; flex-direction: column; }
+/* one possession: a line for when, who and what; a line for what it came to and the buttons */
+.poss-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.poss-row:last-child { border-bottom: 0; }
+.poss-row.on { background: #fff4f4; margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; }
+.poss-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.poss-row .time { font-weight: 700; }
+.poss-row .what { flex: 1 1 160px; min-width: 0; }
+.poss-row .pts { font-weight: 800; }
+.poss-row .typed { font-weight: 500; font-size: 13px; color: var(--muted); }
+.poss-row .unlabelled { color: var(--muted); }
+.poss-row .buttons { margin-left: auto; display: flex; gap: 4px; }
+/* Plays mode: the form */
+.poss-form { display: flex; flex-direction: column; gap: 12px; background: var(--bg); border-radius: 10px; padding: 14px; }
+.poss-form .field input, .poss-form .field select { background: var(--card); }
+.form-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.time-pick { display: flex; gap: 6px; }
+.time-pick input { flex: 1 1 60px; min-width: 0; }
+.time-pick .btn { flex: none; min-height: 44px; padding: 0 12px; }
+.form-title { font-weight: 700; font-size: 18px; }
+.sure { color: var(--red-dark); }
+@media (max-width: 640px) {
+  .result-row > button { min-height: 60px; font-size: 28px; }
+}
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page page-wide">
+  <div class="page-head">
+    <div class="head-text">
+      <a class="back-link" id="back-link" href="game.html">← Game</a>
+      <h1 class="title">Tag shots and plays</h1>
+      <div class="subtitle" id="subtitle">Loading...</div>
+    </div>
+    <div class="head-side">
+      <div class="segment" id="mode-tabs" role="tablist" aria-label="What to tag">
+        <button type="button" role="tab" data-mode="shots" class="on">Shots</button>
+        <button type="button" role="tab" data-mode="plays">Plays</button>
+      </div>
+      <div class="period-row" id="period-row">
+        <span class="label">Period</span>
+        <div class="segment" id="periods" role="group" aria-label="Period"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shown when there is no game, or it has not been processed far enough. -->
+  <section class="card" id="not-ready" hidden>
+    <h2 class="card-title">Nothing to tag yet</h2>
+    <div class="note" id="not-ready-text"></div>
+    <div class="row"><a class="btn btn-red" id="not-ready-link" href="games.html">Go to the games</a></div>
+  </section>
+
+  <div class="two-col" id="work">
+    <section class="col-main watch">
+      <div class="card card-tight">
+        <div class="stage" id="stage">
+          <video id="video" preload="auto" playsinline></video>
+          <div class="boxes" id="boxes"></div>
+          <div class="stage-note" id="stage-note">Loading the video...</div>
+        </div>
+        <div class="transport">
+          <button class="jump" id="back5" type="button" aria-label="Back 5 seconds">−5s</button>
+          <button class="play" id="play" type="button" aria-label="Play">
+            <svg id="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"></path></svg>
+            <svg id="pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg>
+          </button>
+          <button class="jump" id="fwd5" type="button" aria-label="Forward 5 seconds">+5s</button>
+          <div class="video-clock" id="clock">0:00</div>
+          <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Where in the video" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="scrub-fill"></span></div>
+        </div>
+        <div id="strip-wrap" hidden>
+          <div class="strip" id="strip" aria-label="The possessions along the video"></div>
+          <div class="legend" style="margin-top: 8px">
+            <span><span class="mark"></span>Our possession</span>
+            <span><span class="mark mark-grey"></span>Theirs, scored</span>
+            <span><span class="mark mark-light"></span>Theirs</span>
+            <span><span class="mark mark-pale"></span>Turnover</span>
+            <span>Click a block to jump the video there</span>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="help">Pause at a shot, click the shooter in the picture, then choose made or missed.</div>
+    </section>
+
+    <aside class="col-side">
+      <!-- Shots mode -->
+      <div id="shots-side" class="side">
+        <section class="card">
+          <div class="shooter">
+            <div class="shooter-number empty" id="shooter-number">?</div>
+            <div class="shooter-text">
+              <div class="small muted">Shooter</div>
+              <div class="shooter-name" id="shooter-name">Click the shooter in the picture</div>
+              <div class="hint" id="shooter-where">Pause the video at the shot first</div>
+            </div>
+          </div>
+          <div class="typed" id="typed">
+            <span class="small muted">Not boxed? Type it:</span>
+            <div class="segment" id="typed-team" role="group" aria-label="Team"></div>
+            <input id="typed-number" type="text" inputmode="numeric" placeholder="No." aria-label="Jersey number" maxlength="2">
+          </div>
+          <div class="kind-row" id="kinds">
+            <button type="button" data-kind="2">2 points</button>
+            <button type="button" data-kind="3">3 points</button>
+            <button type="button" data-kind="ft">Free throw</button>
+          </div>
+          <div class="hint" id="kind-hint" hidden></div>
+          <div class="result-row">
+            <button class="made" id="made" type="button">MADE</button>
+            <button class="missed" id="missed" type="button">MISSED</button>
+          </div>
+        </section>
+
+        <section class="card" style="gap: 8px">
+          <div class="card-head middle">
+            <h2 class="card-title">Tagged so far</h2>
+            <button class="undo" id="undo" type="button" disabled>Undo last</button>
+          </div>
+          <div class="small muted" id="points-line" hidden></div>
+          <div class="tagged" id="tagged"><div class="hint">No shots tagged yet.</div></div>
+          <a class="btn btn-light btn-block" id="heat-link" href="game.html" style="margin-top: 6px">See the scoring heat map</a>
+        </section>
+      </div>
+
+      <!-- Plays mode -->
+      <div id="plays-side" class="side" hidden>
+        <section class="card">
+          <div class="card-head middle">
+            <h2 class="card-title">Possessions</h2>
+            <span class="chip chip-grey" id="poss-count">0 of 0 labelled</span>
+          </div>
+          <div class="hint">Watch the video. Press <b>Add possession</b> when one starts, <b>End</b> when it ends, then say who had the ball, what they ran and what it came to. Keys: S marks the start, E the end, Space plays and pauses.</div>
+          <div class="row">
+            <button class="btn btn-red" id="add-possession" type="button">Add possession</button>
+            <button class="btn btn-link" id="edit-plays" type="button">Edit play names</button>
+          </div>
+
+          <form id="poss-form" class="poss-form" hidden>
+            <div class="form-title" id="form-title">New possession</div>
+            <div class="form-two">
+              <div class="field"><label for="f-start">Start</label>
+                <div class="time-pick"><input id="f-start" type="text" inputmode="numeric" placeholder="0:00"><button class="btn btn-outline" type="button" id="use-start">Start</button></div></div>
+              <div class="field"><label for="f-end">End</label>
+                <div class="time-pick"><input id="f-end" type="text" inputmode="numeric" placeholder="0:00"><button class="btn btn-outline" type="button" id="use-end">End</button></div></div>
+            </div>
+            <div class="field"><span class="label">Who had the ball</span><div class="segment" id="f-team" role="group" aria-label="Who had the ball"></div></div>
+            <div class="form-two">
+              <div class="field"><label for="f-offense">Offense run</label><select id="f-offense"></select></div>
+              <div class="field"><label for="f-defense">Defense they faced</label><select id="f-defense"></select></div>
+            </div>
+            <div class="field"><span class="label">What it came to</span><div class="segment" id="f-outcome" role="group" aria-label="Outcome"></div></div>
+            <div class="form-two">
+              <div class="field"><label for="f-points">Points</label><input id="f-points" type="number" min="0" max="10" placeholder="0"></div>
+              <div class="field"><label for="f-note">Note (optional)</label><input id="f-note" type="text" placeholder="a few words"></div>
+            </div>
+            <div class="hint" id="points-hint">Counted from the shots tagged in this span. Type a number to overrule it.</div>
+            <div class="row">
+              <button class="btn btn-green" type="submit" id="save-possession">Save possession</button>
+              <button class="btn btn-light" type="button" id="cancel-possession">Cancel</button>
+            </div>
+          </form>
+
+          <div id="plays-editor" class="poss-form" hidden>
+            <div class="form-title">Play names</div>
+            <div class="form-two">
+              <div class="field"><label for="names-offense">Offense, one per line</label><textarea id="names-offense" rows="6"></textarea></div>
+              <div class="field"><label for="names-defense">Defense, one per line</label><textarea id="names-defense" rows="6"></textarea></div>
+            </div>
+            <div class="hint">Add your own plays here. Possessions already labelled keep their words.</div>
+            <div class="row">
+              <button class="btn btn-outline" type="button" id="save-names">Save the names</button>
+              <button class="btn btn-light" type="button" id="cancel-names">Cancel</button>
+            </div>
+          </div>
+
+          <div class="poss-list" id="poss-list"><div class="hint">No possessions labelled yet.</div></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="tag.js"></script>
+</body>
+</html>

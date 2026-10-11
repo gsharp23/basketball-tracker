@@ -19,6 +19,8 @@ What is in here
     chosen_game(), remember_game(video)       the game the coach is working on
 
     load_settings(), save_settings(changes)   data/_dashboard/settings.json
+    check_drive_folder(path)    is the Google Drive folder the coach named on this computer? (and what is in it)
+    model_files(), check_model_name(name)     the .pt files in models/ and their score cards
     load_roster(), save_roster(roster)        roster.json at the project root (never leaves the laptop)
     storage_info()              are the data folders in place, where, and how full is the drive
 
@@ -64,10 +66,13 @@ COURT_SIZES = {"high_school": ("High school", 84, 50), "junior_high": ("Junior h
 
 DEFAULT_SETTINGS = {
     "court_size": "high_school",        # a key of COURT_SIZES
-    "run_where": "laptop",              # "laptop" or "colab" (Colab is coming next)
+    "run_where": "laptop",              # "laptop" or "colab"
     "make_videos": True,                # make the videos with player boxes and the court view
-    "drive_folder": "Hoops Tracker",    # Google Drive, coming next
+    "drive_folder": "Hoops Tracker",    # the folder's name inside Google Drive (what the Colab notebook looks for)
+    "drive_folder_path": "",            # that folder on this computer, where Google Drive for desktop keeps it
+                                        # (for example /mnt/g/My Drive/Hoops Tracker); "" = not connected
     "drive_delete_after": True,
+    "detector_model": "player_detector.pt",   # the model file in models/ the pipeline finds players with
 }
 
 
@@ -334,6 +339,7 @@ def list_games():
         "shots", "points"  what the coach has tagged so far
         "players"       players with a number found by the stats (None before then)
         "roster_newer"  True when roster.json changed after the stats were made: "Carry on" only redoes the stats
+        "roster_changed" True when that is the ONLY thing left to do (the rows say so instead of "stopped part-way")
     """
     games = []
     busy = running_videos()
@@ -360,6 +366,10 @@ def list_games():
         game["shots"], game["points"] = shots_count(path.stem)
         game["players"] = players_count(path.stem)
         game["roster_newer"] = roster_newer_than_stats(path.stem)
+        # Every other step done and only the stats older than the roster: "Carry on" redoes the stats alone, in seconds.
+        stages = game["stages"] or {}
+        game["roster_changed"] = bool(game["roster_newer"] and game["status"] == "stopped part-way"
+                                      and all(state == "done" for stage, state in stages.items() if stage != "stats"))
         games.append(game)
     return games
 
@@ -404,9 +414,84 @@ def save_settings(changes):
     settings["make_videos"] = bool(settings["make_videos"])
     settings["drive_delete_after"] = bool(settings["drive_delete_after"])
     settings["drive_folder"] = str(settings["drive_folder"]).strip() or DEFAULT_SETTINGS["drive_folder"]
+    settings["drive_folder_path"] = check_drive_folder(settings["drive_folder_path"])["path"]
+    settings["detector_model"] = check_model_name(settings["detector_model"])
     DASH_DIR.mkdir(exist_ok=True)
-    config.save_json(DASH_DIR / "settings.json", settings, indent=2)
+    # Keys another part of the tool keeps in the same file (the Drive link, for one) are left as they are.
+    saved = read_json(DASH_DIR / "settings.json", {})
+    saved = saved if isinstance(saved, dict) else {}
+    saved.update(settings)
+    config.save_json(DASH_DIR / "settings.json", saved, indent=2)
     return settings
+
+
+def check_drive_folder(path):
+    """Look at the Drive folder path the coach typed: {"path", "ok", "message", "windows_path", "entries"}.
+
+    "" (not connected) is fine. A Windows path (G:\\My Drive\\Hoops Tracker) is turned into the
+    Ubuntu one (/mnt/g/My Drive/Hoops Tracker). Raises ValueError when the folder is not there.
+    """
+    text = str(path or "").strip().strip('"')
+    if not text:
+        return {"path": "", "ok": True, "message": "Not connected: games are processed on this laptop.",
+                "windows_path": "", "entries": []}
+    if re.match(r"^[A-Za-z]:[\\/]", text):          # a Windows path: G:\My Drive -> /mnt/g/My Drive
+        text = f"/mnt/{text[0].lower()}/" + text[3:].replace("\\", "/")
+    folder = Path(text)
+    if not folder.is_absolute():
+        raise ValueError("Type the whole path of the folder, like /mnt/g/My Drive/Hoops Tracker or G:\\My Drive\\Hoops Tracker.")
+    try:
+        if not folder.is_dir():
+            raise ValueError(f"There is no folder at {folder}. Check the path in Windows Explorer, or leave it empty.")
+        entries = sorted(entry.name + ("/" if entry.is_dir() else "") for entry in folder.iterdir()
+                         if not entry.name.startswith("."))[:60]
+    except OSError:
+        raise ValueError(f"The folder {folder} cannot be read. Is Google Drive for desktop running?")
+    return {"path": str(folder), "ok": True, "message": f"Found it: {len(entries)} item(s) inside.",
+            "windows_path": main.windows_path(folder), "entries": entries}
+
+
+def model_files():
+    """The model files in models/: [{"name", "megabytes", "trained", "dataset_version", "scores"}], name order.
+
+    A model trained by the notebook has a models/<name>.json next to it with its date, the dataset
+    it came from and its scores; a model without one shows nulls there.
+    """
+    found = []
+    if not config.MODELS_DIR.is_dir():
+        return found
+    for path in sorted(config.MODELS_DIR.glob("*.pt"), key=lambda path: path.name.lower()):
+        card = read_json(path.with_suffix(".json"), {})
+        card = card if isinstance(card, dict) else {}
+        found.append({"name": path.name, "megabytes": round(path.stat().st_size / 1e6),
+                      "trained": card.get("trained"), "dataset_version": card.get("dataset_version"),
+                      "scores": card.get("scores") if isinstance(card.get("scores"), dict) else None,
+                      "speed_fps": card.get("speed_fps")})
+    return found
+
+
+# The downloaded models in plain words, the same on every screen; any other file keeps its name.
+DOWNLOADED_NAMES = {"player_detector": "Player finder", "ball_detector_model": "Ball finder", "yolov8n": "Small general model"}
+
+
+def model_label(name, card):
+    """"v3" for detector_v3.pt, "v3 · 2" for detector_v3_2.pt; a downloaded model gets its plain name ("Player finder")."""
+    stem = Path(name).stem
+    if card.get("trained") and stem.startswith("detector_v"):
+        number, _, again = stem[len("detector_v"):].partition("_")
+        return f"v{number}" + (f" · {again}" if again else "")
+    return DOWNLOADED_NAMES.get(stem, stem)
+
+
+def check_model_name(name):
+    """A detector model's file name, checked to be a .pt file in models/ (the default when the folder cannot be read)."""
+    name = str(name or "").strip()
+    names = [model["name"] for model in model_files()]
+    if not names:
+        return name or DEFAULT_SETTINGS["detector_model"]
+    if name not in names:
+        raise ValueError(f"\"{name}\" is not a model file in the models folder. Choose one of: {', '.join(names)}.")
+    return name
 
 
 EMPTY_ROSTER = {"home": {"name": "Home", "players": {}}, "away": {"name": "Away", "players": {}}}

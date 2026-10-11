@@ -4,7 +4,10 @@
 
 What it does
     1. Reads every 3rd frame of the video (--stride).
-    2. Runs the basketball model on it and keeps Player, Ref, Ball and Hoop boxes.
+    2. Runs the detector model on it and keeps Player, Ref, Ball and Hoop boxes.
+       The model is the one the dashboard's settings name (config.detector_path(); the downloaded
+       player_detector.pt unless the coach chose a model trained on his own games). The classes
+       are matched by NAME ("Referee" counts as "Ref"), because every model numbers them differently.
     3. Follows players and referees from frame to frame so each keeps an ID number.
     4. Writes data/<video>/tracks.json and an annotated video outputs/<video>/tracked.mp4.
 
@@ -23,6 +26,7 @@ Known limits
     but are mostly wrong with the current model: do not build stats on them.
 """
 import argparse
+import json
 import os
 import shutil
 import signal
@@ -97,17 +101,50 @@ def parse_args():
 
 # ---------------------------------------------------------------- detection
 
-def detect(model, frame, device="cpu"):
-    """Run the model on one frame. Returns {class name: (boxes, confidences)}."""
+# The four kinds of thing the pipeline uses, and the names a model may give them (in lower case).
+# The downloaded model says "Ref", a model trained by the dashboard says "Referee".
+WANTED = {"Player": ("player",), "Ref": ("ref", "referee"), "Ball": ("ball", "basketball"), "Hoop": ("hoop", "rim", "basket")}
+# Frames are shrunk to this width for the model unless the model's score card asks for another size.
+PICTURE_SIZE = 640
+
+
+def class_numbers(names):
+    """Which class number of a model is which kind: {"Player": 4, "Ref": 5, "Ball": 0, "Hoop": 2}, by name.
+
+    `names` is the model's own list (model.names). A kind the model does not know gets None,
+    and its boxes are simply empty.
+    """
+    lower = {int(number): str(name).strip().lower() for number, name in names.items()}
+    return {kind: next((number for number, name in lower.items() if name in aliases), None)
+            for kind, aliases in WANTED.items()}
+
+
+def picture_size_of(model_path):
+    """The picture width a model was trained at, from its score card (models/<name>.json), else PICTURE_SIZE.
+
+    A model trained by the training notebook is trained at a larger size so a small ball stays
+    visible; running it smaller would lose the ball again. The downloaded model has no card.
+    """
+    card = model_path.with_suffix(".json")
+    try:
+        with open(card, "r", encoding="utf-8") as f:
+            size = int(json.load(f).get("picture_size") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        size = 0
+    return size if 320 <= size <= 1920 else PICTURE_SIZE
+
+
+def detect(model, frame, numbers, device="cpu", size=PICTURE_SIZE):
+    """Run the model on one frame. Returns {kind: (boxes, confidences)} for the four kinds in WANTED."""
     # agnostic_nms: one box per person, so nobody is reported as both Player and Ref.
-    result = model(frame, imgsz=640, conf=DETECT_CONF, agnostic_nms=True, verbose=False, device=device)[0]
+    result = model(frame, imgsz=size, conf=DETECT_CONF, agnostic_nms=True, verbose=False, device=device)[0]
     boxes = result.boxes.xyxy.cpu().numpy()
     confs = result.boxes.conf.cpu().numpy()
     classes = result.boxes.cls.cpu().numpy().astype(int)
     found = {}
-    for number, name in config.CLASS_NAMES.items():
-        keep = classes == number
-        found[name] = (boxes[keep], confs[keep])
+    for kind, number in numbers.items():
+        keep = classes == number if number is not None else np.zeros(len(classes), dtype=bool)
+        found[kind] = (boxes[keep], confs[keep])
     return found
 
 
@@ -268,11 +305,17 @@ def process_video(video, stride, max_frames, make_video, start_frame, next_id, p
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
     device = config.device()        # "cpu" on the laptop, the graphics card on Colab
-    print(f"Loading the model... (running on {'the CPU' if device == 'cpu' else 'the graphics card, ' + device})",
-          flush=True)
-    model = YOLO(str(config.PLAYER_MODEL))
+    detector = config.detector_path()
+    size = picture_size_of(detector)
+    print(f"Loading the model {detector.name}... (running on "
+          f"{'the CPU' if device == 'cpu' else 'the graphics card, ' + device}, pictures {size} wide)", flush=True)
+    model = YOLO(str(detector))
+    numbers = class_numbers(model.names)
+    unknown = [kind for kind, number in numbers.items() if number is None]
+    if unknown:
+        print(f"NOTE: the model {detector.name} has no class for {', '.join(unknown)}, so those boxes stay empty.", flush=True)
     # The model's first run is slow. Do it once on a black picture so the speed shown is honest.
-    model(np.zeros((360, 640, 3), np.uint8), imgsz=640, verbose=False, device=device)
+    model(np.zeros((360, 640, 3), np.uint8), imgsz=size, verbose=False, device=device)
     player_tracker = make_tracker(tracked_fps)
     ref_tracker = make_tracker(tracked_fps)
     player_ids, ref_ids = {}, {}
@@ -301,7 +344,7 @@ def process_video(video, stride, max_frames, make_video, start_frame, next_id, p
             finished = True
             break
 
-        found = detect(model, frame, device)
+        found = detect(model, frame, numbers, device, size)
         record = {
             "frame": frame_index,
             "players": track(player_tracker, *found["Player"], player_ids, state),
@@ -374,7 +417,7 @@ def join_parts(video, stride, parts):
         "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         "frame_count": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
         "stride": stride,
-        "model": config.PLAYER_MODEL.name,
+        "model": config.detector_path().name,
         "frames": [record for part in parts for record in part["frames"]],
     }
     cap.release()
@@ -467,8 +510,10 @@ def run(video, stride=config.FRAME_STRIDE, max_frames=None, make_video=True, res
     detection is already finished to be done again from the first frame.
     """
     source = config.require_video(video)
-    if not config.PLAYER_MODEL.exists():
-        sys.exit(f"Cannot find the model {config.PLAYER_MODEL}\nIs the models folder in place? (See README.md.)")
+    detector = config.detector_path()
+    if not detector.exists():
+        sys.exit(f"Cannot find the model {detector}\nIs the models folder in place? (See README.md.) If the dashboard's "
+                 "Settings name a model that was deleted, choose another one there.")
     check_video_opens(source)       # before the slow model load, not after it
     config.lock_video(video)
 

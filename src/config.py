@@ -9,7 +9,8 @@ What is in here
     PROJECT_ROOT, CLIPS_DIR, MODELS_DIR, DATA_DIR, OUTPUTS_DIR, CROPS_DIR   folders
     ROSTER_PATH, DEFAULT_VIDEO                                              files
     PLAYER_MODEL, YOLOV8N_MODEL          model weight files
-    CLASS_NAMES                          class numbers of the player model
+    detector_path()                      the model the pipeline finds players with (the dashboard's choice)
+    CLASS_NAMES                          class numbers of the downloaded player model
     FRAME_STRIDE                         look at every 3rd frame by default
     COURT_LENGTH_FT, COURT_WIDTH_FT      court size in feet (change for your gym)
 
@@ -33,6 +34,10 @@ import os
 import sys
 from pathlib import Path
 
+# Nothing here may talk to the internet. Ultralytics (the detector library) checks whether it is online when it
+# is imported; this setting makes it skip that check. Every module imports config before the detector.
+os.environ.setdefault("YOLO_OFFLINE", "1")
+
 # The repo folder, worked out from where this file is, so scripts work from any folder.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -50,8 +55,27 @@ PLAYER_MODEL = MODELS_DIR / "player_detector.pt"
 # Official small model: fast, but only knows "person".
 YOLOV8N_MODEL = MODELS_DIR / "yolov8n.pt"
 
-# Class numbers used by player_detector.pt.
+# Class numbers used by player_detector.pt. (detect_track.py matches classes by NAME, so a model
+# trained by the dashboard, with other numbers and "Referee" for "Ref", works the same way.)
 CLASS_NAMES = {0: "Ball", 1: "Clock", 2: "Hoop", 3: "Overlay", 4: "Player", 5: "Ref", 6: "Scoreboard"}
+
+
+def detector_path():
+    """The model the pipeline finds players with: models/<detector_model> as the dashboard's settings say.
+
+    The Settings and Models screens write "detector_model" into data/_dashboard/settings.json
+    ("Use this one"). Nothing saved, or no settings file at all, means PLAYER_MODEL, so a laptop
+    without the dashboard behaves as it always did. A name that is not a plain .pt file name
+    is ignored. The file itself may be missing: detect_track.py then stops with a plain message.
+    """
+    try:
+        with open(DATA_DIR / "_dashboard" / "settings.json", "r", encoding="utf-8") as f:
+            name = str(json.load(f).get("detector_model") or "").strip()
+    except (OSError, ValueError, AttributeError):
+        name = ""
+    if name and name.endswith(".pt") and "/" not in name and "\\" not in name:
+        return MODELS_DIR / name
+    return PLAYER_MODEL
 
 # Look at every 3rd frame (about 10 per second). Every frame would take 3x as long.
 FRAME_STRIDE = 3

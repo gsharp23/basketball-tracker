@@ -22,7 +22,7 @@ import dash_common
 
 router = APIRouter(prefix="/api/settings")
 
-NOTEBOOK = config.PROJECT_ROOT / "colab" / "train_ball_model.ipynb"
+NOTEBOOK = config.PROJECT_ROOT / "colab" / "train_detector.ipynb"
 PICTURE_TYPES = {".png": "logo.png", ".jpg": "logo.jpg", ".jpeg": "logo.jpg", ".svg": "logo.svg"}
 MAX_LOGO_BYTES = 5_000_000
 

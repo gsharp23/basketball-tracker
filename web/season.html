@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Season · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* This screen's own one rule; everything else comes from app.css. */
+  #game-rows td:nth-child(-n+3) { white-space: nowrap; }     /* the date, opponent and result never wrap */
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-text">
+      <a href="seasons.html" class="back-link">← Seasons</a>
+      <h1 class="title title-big" id="season-title">Season</h1>
+    </div>
+    <div class="head-side">
+      <button class="btn btn-outline" id="make-current" type="button" hidden>Make this the current season</button>
+      <button class="btn btn-red" id="add-game" type="button">Add a game</button>
+      <button class="btn btn-outline" id="open-roster" type="button">Roster</button>
+    </div>
+  </div>
+
+  <div class="callout" id="provisional-note" hidden>A game in this season had its court marked with stand-in clicks, so every number worked out from positions (the shot map, distances) is provisional until the court is marked by you.</div>
+
+  <!-- "Add a game": the plain steps and the form that puts a video in a season -->
+  <section class="card" id="add-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title">Add a game</h2>
+      <button class="btn btn-light btn-sm" id="add-close" type="button">Close</button>
+    </div>
+    <ol class="steps-list">
+      <li>Copy the game video into the clips folder: <code id="clips-folder">...</code> (paste that into the address bar of Windows Explorer).</li>
+      <li>Press <button class="btn btn-light btn-sm" id="add-refresh" type="button">Refresh</button> and the video appears in the list below.</li>
+      <li>Choose it, name the opponent, say home or away and the date, and save. The final score can be typed now or after the game is watched.</li>
+    </ol>
+    <form id="assign-form" class="stack" style="gap: 14px">
+      <div class="form-grid">
+        <div class="field"><label for="assign-game">Game (the video file)</label><select id="assign-game"></select></div>
+        <div class="field"><label for="assign-season">Season</label><select id="assign-season"></select></div>
+        <div class="field"><label for="assign-opponent">Opponent</label><input id="assign-opponent" type="text" list="team-names" maxlength="60" placeholder="Who the game was against"><datalist id="team-names"></datalist></div>
+        <div class="field"><label for="assign-date">Date</label><input id="assign-date" type="date"></div>
+        <div class="field"><label>Home or away</label>
+          <div class="segment" id="assign-home"><button type="button" data-home="true">Home</button><button type="button" data-home="false">Away</button></div>
+        </div>
+        <div class="field"><label for="assign-us">Final score (us – them)</label>
+          <div class="score-row"><input id="assign-us" class="input" type="text" inputmode="numeric" placeholder="Us"><span>–</span><input id="assign-them" class="input" type="text" inputmode="numeric" placeholder="Them"></div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-red" type="submit" id="assign-save">Save the game</button>
+        <span class="hint">A new opponent name makes a team on the Teams screen. Which jersey colour is us is chosen on the game's own page.</span>
+      </div>
+    </form>
+  </section>
+
+  <!-- the season's roster -->
+  <section class="card" id="roster-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title">Roster</h2>
+      <span class="card-note">Names never leave this laptop</span>
+    </div>
+    <div class="note">The jersey number and the name of each player this season. The stats show a name only for a player whose number was read on our team.</div>
+    <div class="field" style="max-width: 360px"><label for="roster-team-name">Our team's name</label><input id="roster-team-name" type="text" maxlength="60"></div>
+    <div class="table-wrap">
+      <table class="table roster-table">
+        <thead><tr><th>No.</th><th>Player</th></tr></thead>
+        <tbody id="roster-rows"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button class="btn btn-light btn-sm" id="roster-add" type="button">Add a row</button>
+      <button class="btn btn-outline" id="roster-save" type="button">Save the roster</button>
+      <button class="btn btn-light" id="roster-close" type="button">Close</button>
+      <button class="btn btn-link push small" id="season-delete" type="button" hidden>Delete this season</button>
+    </div>
+  </section>
+
+  <div class="grid-tiles">
+    <div class="tile tile-dark"><div class="tile-label">Record</div><div class="tile-value" id="tile-record">—</div></div>
+    <div class="tile"><div class="tile-label">Points / game</div><div class="tile-value" id="tile-points">—</div></div>
+    <div class="tile"><div class="tile-label">Allowed / game</div><div class="tile-value" id="tile-allowed">—</div></div>
+    <div class="tile"><div class="tile-label">Field goals</div><div class="tile-value" id="tile-fg">—</div></div>
+    <div class="tile"><div class="tile-label">Threes</div><div class="tile-value" id="tile-threes">—</div></div>
+  </div>
+
+  <div class="two-col stretch">
+    <section class="card col-main">
+      <div class="card-head">
+        <h2 class="card-title">Points by game</h2>
+        <div class="legend"><span><span class="mark mark-line"></span>Us</span><span><span class="mark mark-line mark-grey"></span>Opponents</span></div>
+      </div>
+      <div id="chart"></div>
+      <div class="hint" id="chart-note" hidden></div>
+    </section>
+    <section class="card col-side">
+      <div class="card-head">
+        <h2 class="card-title">Season shot map</h2>
+        <span class="card-note" id="shots-count"></span>
+      </div>
+      <svg class="court" id="shot-map" role="img" aria-label="Where the team scored from this season"></svg>
+      <div class="shares" id="shares"></div>
+      <div class="hint" id="shots-note"></div>
+    </section>
+  </div>
+
+  <div class="two-col">
+    <section class="card col-main">
+      <h2 class="card-title">Games</h2>
+      <div class="table-wrap">
+        <table class="table" style="min-width: 560px">
+          <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Status</th><th></th></tr></thead>
+          <tbody id="game-rows"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="games-note" hidden></div>
+      <div class="callout callout-red" id="colab-note" hidden></div>
+    </section>
+    <section class="card col-side">
+      <h2 class="card-title">Leaders</h2>
+      <div class="lead-list" id="leaders"></div>
+      <div class="hint">Distance and time are measured while a player is on camera.</div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="game_rows.js"></script>
+<script src="season.js"></script>
+</body>
+</html>

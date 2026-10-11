@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scouting report · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* A sheet the size of an A4 page, for the browser's print dialog ("Save as PDF"). */
+  .report-bar { max-width: 794px; margin: 16px auto 0; padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .sheet { background: var(--card); max-width: 794px; margin: 16px auto 40px; padding: 36px 40px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 2px 12px rgba(21, 23, 28, 0.08); }
+  .sheet-head { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid var(--ink); padding-bottom: 14px; }
+  .sheet-title { font-size: 44px; }
+  .sheet h2 { font-size: 17px; font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 8px; }
+  .sheet .table { font-size: 13px; }
+  .sheet .table th { font-size: 12px; padding: 6px 8px; }
+  .sheet .table td { padding: 7px 8px; }
+  .sheet .callout { font-size: 13px; margin-top: 8px; }
+  .sheet .table .bar-under.bar-red > div { background: var(--red); }
+  .sheet-two { display: flex; gap: 18px; flex-wrap: wrap; }
+  .sheet-two > * { flex: 1 1 300px; min-width: 0; }
+  .sheet-foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .game-list { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .game-list > div { display: flex; gap: 12px; }
+  @media print {
+    @page { size: A4; margin: 14mm; }
+    body { background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+    .sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+    .sheet section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body class="area-analysis">
+<div class="report-bar no-print">
+  <a class="back-link" id="back" href="teams.html">← Back to the team</a>
+  <button class="btn btn-red push" id="print" type="button">Print or save as PDF</button>
+  <span class="hint">In the print window, choose "Save as PDF" as the printer to keep a copy.</span>
+</div>
+<main class="sheet" id="sheet"><div class="hint">Reading the games against them...</div></main>
+<script src="app.js"></script>
+<script src="team_parts.js"></script>
+<script src="report.js"></script>
+</body>
+</html>

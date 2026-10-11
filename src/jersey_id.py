@@ -185,12 +185,13 @@ def load_reader():
     gpu = config.device() != "cpu"      # False on the laptop, True on Colab
     print(f"The number reader runs on {'the graphics card' if gpu else 'the CPU'}.", flush=True)
     try:
-        return easyocr.Reader(["en"], gpu=gpu, verbose=False,
+        # download_enabled=False: the reader's files are kept in models/easyocr; nothing is fetched from the internet.
+        return easyocr.Reader(["en"], gpu=gpu, verbose=False, download_enabled=False,
                               model_storage_directory=str(EASYOCR_DIR),
                               user_network_directory=str(EASYOCR_DIR / "user_network"))
     except (RuntimeError, MemoryError, OSError) as error:
         sys.exit(f"Could not start the number reader (EasyOCR): {error}\n"
-                 "This usually means the computer ran out of memory or the model download failed.\n"
+                 f"This usually means the computer ran out of memory, or the reader's files are missing from {EASYOCR_DIR}.\n"
                  "Close other programs and run the command again.")
 
 

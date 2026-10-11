@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seasons · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* This screen's own few styles (the season card); everything else comes from app.css. */
+  .season-card { gap: 16px; padding: 22px 24px; }
+  .season-card .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .season-name { font-family: var(--font-condensed); font-style: italic; font-weight: 800; font-size: 36px; line-height: 1; }
+  .season-card .trend { width: 100%; height: 60px; }
+  .card-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--muted); }
+  .card-foot .open { font-weight: 700; color: var(--ink); white-space: nowrap; }
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-text">
+      <h1 class="title">Seasons</h1>
+      <div class="subtitle">Every game you have recorded, grouped by season. A season holds its own roster.</div>
+    </div>
+    <div class="head-side">
+      <button class="btn btn-red" id="new-season" type="button" style="min-height: 48px; padding: 0 22px; font-size: 16px">New season</button>
+    </div>
+  </div>
+
+  <!-- "New season": folded away until the button is pressed -->
+  <section class="card" id="new-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title">New season</h2>
+      <span class="card-note">Names never leave this laptop</span>
+    </div>
+    <form id="new-form" class="stack" style="gap: 14px">
+      <div class="form-grid">
+        <div class="field"><label for="new-name">Season name</label><input id="new-name" type="text" placeholder="2027-28" maxlength="40"></div>
+        <div class="field"><label for="new-start">First day</label><input id="new-start" type="date"></div>
+        <label class="check check-box" style="align-self: end"><input type="checkbox" id="new-current" checked>Make it the current season</label>
+      </div>
+      <div class="stack" style="gap: 8px">
+        <div class="label">Roster</div>
+        <div class="hint">The jersey number and the name of each player. The names are kept in the season on this laptop only; fill them in later if you like.</div>
+        <div class="field" style="max-width: 360px"><label for="new-team-name">Our team's name</label><input id="new-team-name" type="text" maxlength="60"></div>
+        <div class="table-wrap">
+          <table class="table roster-table">
+            <thead><tr><th>No.</th><th>Player</th></tr></thead>
+            <tbody id="new-roster-rows"></tbody>
+          </table>
+        </div>
+        <div><button class="btn btn-light btn-sm" id="new-roster-add" type="button">Add a row</button></div>
+      </div>
+      <div class="row">
+        <button class="btn btn-red" type="submit" id="new-save">Create the season</button>
+        <button class="btn btn-light" type="button" id="new-cancel">Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="grid-cards" id="season-cards">
+    <div class="hint">Reading the seasons...</div>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2 class="card-title">Recent games</h2>
+      <a href="games.html" class="card-link-right">All games →</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table" style="min-width: 720px">
+        <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Status</th><th>Shots tagged</th><th></th></tr></thead>
+        <tbody id="recent-rows"></tbody>
+      </table>
+    </div>
+    <div class="hint" id="recent-note" hidden></div>
+  </section>
+</main>
+<script src="app.js"></script>
+<script src="game_rows.js"></script>
+<script src="seasons.js"></script>
+</body>
+</html>

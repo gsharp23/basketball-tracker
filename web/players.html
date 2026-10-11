@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Players · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* This screen's own few styles; everything else comes from app.css. */
+  .players-table td, .players-table th, .lines-table td, .lines-table th { white-space: nowrap; }
+  .players-table td:nth-child(2) { white-space: normal; }           /* a long name may wrap; the numbers never do */
+  .players-table .small { display: inline; }
+  .two-col > .col-main { flex: 2 1 640px; }                          /* the table needs more room than the side panel here */
+  .two-col > .col-side { flex: 1 1 320px; }
+  .table-wrap { scrollbar-width: thin; }                             /* and when it still overflows, the scrollbar shows */
+  .lines-table { font-size: 14px; }
+  .lines-table td { padding: 8px 8px; }
+  .players-table tbody tr { cursor: pointer; }
+  .players-table tbody tr:hover { background: var(--bg); }
+  .player-head { display: flex; align-items: center; gap: 12px; }
+  .player-head .lead-number { width: 48px; height: 48px; font-size: 20px; }
+  .player-head .name { font-size: 22px; font-weight: 700; }
+  .season-pick { min-height: 44px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--card); font-size: 15px; }
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-text">
+      <h1 class="title">Players</h1>
+      <div class="subtitle">Season totals for every player on the roster: points and shots from the tagged shots, time on camera and distance from the processed games.</div>
+    </div>
+    <div class="head-side">
+      <label for="season-pick" class="label">Season</label>
+      <select id="season-pick" class="season-pick"></select>
+    </div>
+  </div>
+
+  <div class="callout" id="provisional-note" hidden>A game in this season had its court marked with stand-in clicks, so the shot maps and distances are provisional until the court is marked by you.</div>
+
+  <div class="two-col">
+    <section class="card col-main">
+      <div class="card-head">
+        <h2 class="card-title" id="players-title">Players</h2>
+        <span class="card-note">Click a player for the shot map and the game lines</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table players-table">
+          <thead><tr><th>No.</th><th>Player</th><th>Games</th><th>Pts</th><th>Per game</th><th>FG</th><th>3PT</th><th>FT</th><th>On camera</th><th>Distance</th></tr></thead>
+          <tbody id="player-rows"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="players-note" hidden></div>
+      <div class="hint">"On camera" is the time a player was in the picture, not minutes played: the camera follows the play. Distance is measured while a player is on the court map. Names never leave this laptop.</div>
+    </section>
+
+    <section class="card col-side" id="player-panel">
+      <div class="hint">Choose a player in the table.</div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="players.js"></script>
+</body>
+</html>

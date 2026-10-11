@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teams · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* this page only: the small team badge on a card */
+  .team-head { display: flex; align-items: center; gap: 12px; }
+  .team-badge { width: 44px; height: 44px; border-radius: 10px; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex: none; }
+  .team-name { font-weight: 800; font-size: 20px; }
+  .team-sub { font-size: 13px; color: var(--muted); }
+  .card-link.card { gap: 14px; }
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-text">
+      <h1 class="title">Teams</h1>
+      <div class="subtitle" id="subtitle">Every team you have played, with what they run on offense and defense, built from every game against them.</div>
+    </div>
+    <div class="head-side">
+      <div class="segment" id="view-switch" role="group" aria-label="Which teams">
+        <button type="button" data-view="opponents" class="on">Opponents</button>
+        <button type="button" data-view="ours">Our team</button>
+        <button type="button" data-view="all">All seasons</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-cards-small" id="cards"><div class="hint">Reading the teams...</div></div>
+
+  <section class="card" id="compare">
+    <div class="card-head">
+      <h2 class="card-title">Compare teams</h2>
+      <span class="card-note" id="compare-note">Share of their possessions · points per possession in brackets</span>
+    </div>
+    <div class="table-wrap" id="compare-wrap"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+<script src="teams.js"></script>
+</body>
+</html>

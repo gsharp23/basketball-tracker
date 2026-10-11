@@ -6,8 +6,8 @@
     python src/possessions.py --video clips/test.mp4 --our-team white
 
 The ball cannot be found in the video yet, so nothing here is detected: the coach labels
-each possession by hand on the Opponent page of the dashboard (automatic recognition is
-a later stage). The report then counts them.
+each possession by hand on the "Tag shots and plays" page of the dashboard (automatic
+recognition is a later stage). The Team page then counts them.
 
 data/<video>/game_info.json      what the coach says about the game (shared with the Games page)
     "opponent"   the opponent's name, "date" the date as typed, both "" until filled in
@@ -18,14 +18,19 @@ data/<video>/possessions.json
         "id"                 number of the possession, never reused while the file exists
         "start_s", "end_s"   when it began and ended, in seconds of the game video
         "team"               who had the ball: a team label of teams.json
-        "offense"            how they played it: a key of OFFENSE_TYPES, or "" (not labelled yet)
-        "defense"            what they faced: a key of DEFENSE_TYPES, or "" (not labelled yet)
+        "offense"            how they played it: one of the coach's play names (data/_dashboard/play_types.json,
+                             "Edit play names" on the Tag page), or "" (not labelled yet)
+        "defense"            what they faced: one of the coach's defense names, or ""
         "points"             points it got them. null = count the made shots of shots.json
                              in that time (the usual case); a number = typed by the coach
+        "outcome"            what it came to: "scored", "missed" or "turnover", or "" (not said yet)
+        "turnover"           true when the outcome is a turnover (its own key, for the counts)
         "note"               a few words from the coach, or ""
 
-OFFENSE_TYPES and DEFENSE_TYPES below are THE place to add the coach's own play names:
-each is a list of (key saved in the file, words shown on the page).
+The coach's play names live in play_types.json (library.load_play_types). OFFENSE_TYPES and
+DEFENSE_TYPES below are the OLD fixed lists, (key saved in the file, words shown): a file
+written before the names were editable still holds those keys, so they stay accepted and
+label_for turns them into words.
 
 This file has no web page in it and can be tested on its own.
 """
@@ -54,12 +59,30 @@ DEFENSE_TYPES = [
 ]
 PRESS_KEY = "press"             # the defense the "pressed after a made basket" callout counts
 
+
+def is_press(defense):
+    """True for a press: the v2 key ("press") or any defense name with "press" in it ("Full-court press",
+    "Full court press", a name the coach retyped on Settings), the way the Teams screen's defense mix counts them."""
+    return defense == PRESS_KEY or "press" in str(defense or "").lower()
+
+
 # A made basket is "followed" by a possession that starts within this many seconds of it.
 FOLLOWS_WITHIN_S = 30
 
 def label_for(types, key):
     """The words for a key, or "Not labelled yet" for ""."""
     return dict(types).get(key, "Not labelled yet" if key == "" else key)
+
+
+# What a possession came to, as the coach says it ("" = not said yet).
+OUTCOMES = ["scored", "missed", "turnover"]
+
+
+def allowed_labels(side):
+    """The words a possession's offense or defense may be: the coach's play names, the old keys, and ""."""
+    import library          # here, not at the top: library.py imports this file
+    keyed = OFFENSE_TYPES if side == "offense" else DEFENSE_TYPES
+    return [""] + library.load_play_types()[side] + [key for key, _ in keyed]
 
 
 # ---------------------------------------------------------------- the two files
@@ -76,9 +99,12 @@ def save_info(video, changes):
 
 def load_possessions(video):
     path = shots.game_folder(video) / "possessions.json"
-    if path.exists():
-        return shots.read_json(path)
-    return {"video": str(video), "next_id": 1, "possessions": []}
+    data = shots.read_json(path) if path.exists() else {"video": str(video), "next_id": 1, "possessions": []}
+    for record in data["possessions"]:
+        # a file written before outcomes existed: a turnover flag counts, anything else is "not said yet"
+        record.setdefault("turnover", False)
+        record.setdefault("outcome", "turnover" if record["turnover"] else "")
+    return data
 
 
 def save_possessions(video, data):
@@ -136,10 +162,11 @@ def check_possession(record, video):
         raise Problem("The possession has to end after it starts. Check the two times.")
     if record["team"] not in teams["labels"]:
         raise Problem("Say which team had the ball.")
-    if record["offense"] not in [""] + [key for key, _ in OFFENSE_TYPES]:
-        raise Problem("That is not one of the offense types.")
-    if record["defense"] not in [""] + [key for key, _ in DEFENSE_TYPES]:
-        raise Problem("That is not one of the defense types.")
+    for side in ("offense", "defense"):
+        if record[side] not in allowed_labels(side):
+            raise Problem(f"\"{record[side]}\" is not one of the {side} play names. Add it with \"Edit play names\" first.")
+    if record["outcome"] not in [""] + OUTCOMES:
+        raise Problem("The outcome is scored, missed or turnover.")
     if record["points"] is not None and not (0 <= record["points"] <= 10):
         raise Problem("Points for one possession go from 0 to 10. Leave it empty to count the tagged shots.")
 
@@ -154,12 +181,14 @@ def clean_points(points):
         raise Problem("Points have to be a whole number, or empty to count the tagged shots.")
 
 
-def add_possession(video, start, end, team, offense="", defense="", points=None, note=""):
-    """Record one possession and return it. start and end as "1:23" or seconds."""
+def add_possession(video, start, end, team, offense="", defense="", points=None, note="", outcome=""):
+    """Record one possession and return it. start and end as "1:23" or seconds; outcome one of OUTCOMES or ""."""
     data = load_possessions(video)
+    outcome = str(outcome or "").strip()
     record = {"id": data["next_id"], "start_s": round(parse_time(start), 1), "end_s": round(parse_time(end), 1),
-              "team": team, "offense": offense or "", "defense": defense or "",
-              "points": clean_points(points), "note": str(note or "").strip()}
+              "team": team, "offense": str(offense or "").strip(), "defense": str(defense or "").strip(),
+              "points": clean_points(points), "outcome": outcome, "turnover": outcome == "turnover",
+              "note": str(note or "").strip()}
     check_possession(record, video)
     data["next_id"] += 1
     data["possessions"].append(record)
@@ -176,15 +205,16 @@ def find_possession(data, possession_id):
 
 
 def edit_possession(video, possession_id, changes):
-    """Change some of a possession's fields (start, end, team, offense, defense, points, note) and return it."""
+    """Change some of a possession's fields (start, end, team, offense, defense, outcome, points, note) and return it."""
     data = load_possessions(video)
     record = find_possession(data, possession_id)
     for key in ("start", "end"):
         if key in changes:
             record[key + "_s"] = round(parse_time(changes[key]), 1)
-    for key in ("team", "offense", "defense", "note"):
+    for key in ("team", "offense", "defense", "note", "outcome"):
         if key in changes:
             record[key] = str(changes[key] or "").strip()
+    record["turnover"] = record["outcome"] == "turnover"
     if "points" in changes:
         record["points"] = clean_points(changes["points"])
     check_possession(record, video)
@@ -255,8 +285,30 @@ def pressed_after_baskets(records, their_shots, our_team):
                           if shot["time_s"] <= record["start_s"] <= shot["time_s"] + FOLLOWS_WITHIN_S), None)
         if following is not None:
             baskets += 1
-            pressed += following["defense"] == PRESS_KEY
+            pressed += is_press(following["defense"])
     return pressed, baskets
+
+
+def press_moments(records, their_shots, our_team):
+    """Each made basket of theirs that a labelled possession of ours followed, and what we met.
+
+    The same pairing as pressed_after_baskets, but kept one by one so the Team page can say WHEN
+    they press (the period of the basket) and how often we turned it over against it.
+    Each: {"time_s", "period" (of the basket), "pressed", "turnover" (of our following possession)}.
+    """
+    ours = sorted((record for record in records if record["team"] == our_team and record["defense"]),
+                  key=lambda record: record["start_s"])
+    moments = []
+    for shot in their_shots:
+        if not (shot["made"] and shot["kind"] == "field goal"):
+            continue
+        following = next((record for record in ours
+                          if shot["time_s"] <= record["start_s"] <= shot["time_s"] + FOLLOWS_WITHIN_S), None)
+        if following is not None:
+            moments.append({"time_s": shot["time_s"], "period": str(shot.get("period") or ""),
+                            "pressed": is_press(following["defense"]),
+                            "turnover": bool(following.get("turnover"))})
+    return moments
 
 
 # ---------------------------------------------------------------- where the points came from

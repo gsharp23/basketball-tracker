@@ -9,9 +9,13 @@ It is served by this laptop to this laptop only (address 127.0.0.1). Nothing is 
 How it is put together
     web/            the screens: plain HTML, CSS and JavaScript, one html + js per screen,
                     web/app.css and web/app.js shared. Served as they are, index.html first.
+                    index.html is the start page and the only door between the two areas,
+                    "Game analysis" (seasons, teams, games, players) and "Model training".
     /api/...        JSON answers the screens ask for. dash_api.py holds the shared ones
-                    (games, jobs, settings, roster, branding) and its docstring is the
-                    contract; every src/api_*.py module with a `router` is included too.
+                    (games, seasons, teams, jobs, settings, branding) and its docstring is the
+                    contract; api_settings.py and the seven screen modules named in
+                    SCREEN_ROUTERS are included too, each only if its file exists.
+    src/library.py  the data model: seasons, teams, game info, the numbers the screens share.
     /files/<folder>/<path>   files from the data folders for the browser: videos (with seeking),
                     pictures, result files. Only outputs/, crops/, clips/, data/ and the
                     branding folder; never the home folder or the code.
@@ -23,6 +27,7 @@ code. Without that folder the dashboard shows a neutral title.
 import argparse
 import html
 import importlib
+import importlib.util
 import os
 import signal
 import socket
@@ -49,13 +54,30 @@ app = FastAPI(title="Hoops Tracker", docs_url=None, redoc_url=None, openapi_url=
 
 # ---------------------------------------------------------------- the API routers
 
+# The screen modules of v3 (see the contract in dash_api.py), in the order they are included.
+# Each is included only if its file exists, so a screen can be added without touching this file.
+SCREEN_ROUTERS = ["api_seasons", "api_teams", "api_game", "api_tag", "api_training", "api_models", "api_drive"]
+
+
 def include_routers():
-    """dash_api.py and every src/api_*.py module that defines `router` (one per screen)."""
-    names = ["dash_api"] + sorted(path.stem for path in SRC_DIR.glob("api_*.py"))
-    for name in names:
+    """dash_api.py and api_settings.py always; each screen module of SCREEN_ROUTERS when its file is there.
+
+    A screen module that exists but fails to import stops the start with its own error, so the
+    mistake is seen at once rather than hidden behind a missing screen.
+    """
+    for name in ["dash_api", "api_settings"]:
+        app.include_router(importlib.import_module(name).router)
+    missing = []
+    for name in SCREEN_ROUTERS:
+        if importlib.util.find_spec(name) is None:
+            missing.append(name)
+            continue
         module = importlib.import_module(name)
-        if hasattr(module, "router"):
-            app.include_router(module.router)
+        if not hasattr(module, "router"):
+            sys.exit(f"src/{name}.py has no `router`. Every screen module defines router = APIRouter(prefix=...).")
+        app.include_router(module.router)
+    if missing:
+        print("Screens not built yet (no file in src/): " + ", ".join(f"{name}.py" for name in missing), flush=True)
 
 
 # ---------------------------------------------------------------- the browser-tab icon

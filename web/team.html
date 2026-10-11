@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* this page only */
+  .table .bar-under.bar-red > div { background: var(--red); }
+  .game-cards { display: flex; flex-wrap: wrap; gap: 14px; }
+  .game-link { flex: 1 1 280px; text-decoration: none; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; color: var(--ink); }
+  .game-link:hover { border-color: var(--line-strong); color: var(--ink); }
+  .note-button { background: transparent; border: 0; padding: 0; text-align: left; color: var(--muted); font: inherit; cursor: text; min-height: 24px; width: 100%; }
+  .note-button:hover { color: var(--ink); }
+  .note-button.empty { font-style: italic; }
+  .note-input { min-height: 36px; padding: 0 10px; font-size: 14px; }
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page" id="team-page">
+  <div class="page-head">
+    <div class="head-with-badge">
+      <span class="head-badge" id="badge" aria-hidden="true"></span>
+      <div class="head-text">
+        <a href="teams.html" class="back-link">← Teams</a>
+        <h1 class="title title-medium" id="title">Team</h1>
+        <div class="subtitle" id="subtitle">Reading the games against them...</div>
+      </div>
+    </div>
+    <div class="head-side">
+      <a class="btn btn-red" id="report-link" href="report.html" target="_blank" rel="noopener">Scouting report (PDF)</a>
+      <a class="btn btn-outline" id="label-link" href="tag.html">Label possessions</a>
+    </div>
+  </div>
+
+  <div class="callout" id="provisional" hidden>This team's games were marked with stand-in court clicks, so every position here is provisional.</div>
+
+  <div id="not-found" class="card" hidden>
+    <h2 class="card-title">Pick a team</h2>
+    <div class="note muted" id="not-found-text">Open a team from the <a href="teams.html">Teams</a> screen.</div>
+  </div>
+
+  <div id="report-body" class="stack" style="gap: 22px" hidden>
+    <div class="two-col two-col-even">
+      <section class="card col-main">
+        <div class="card-head"><h2 class="card-title">What they run on offense</h2><span class="card-note">Click a row to watch those possessions</span></div>
+        <div id="offense"></div>
+        <div id="offense-callout"></div>
+      </section>
+      <section class="card col-side">
+        <div class="card-head"><h2 class="card-title">How they defend us</h2><span class="card-note">Share of our possessions</span></div>
+        <div id="defense"></div>
+        <div id="defense-callout"></div>
+      </section>
+    </div>
+
+    <div class="two-col">
+      <section class="card col-side">
+        <div class="card-head">
+          <h2 class="card-title">Where they score</h2>
+          <div class="pills" id="who-pills"></div>
+        </div>
+        <svg class="court" id="court" role="img" aria-label="Where this team scored against us"></svg>
+        <div class="hint" id="court-note"></div>
+      </section>
+      <section class="card col-main">
+        <div class="card-head"><h2 class="card-title">Their players</h2><span class="card-note">By jersey number · all games against us</span></div>
+        <div id="players"></div>
+        <div class="hint">Opponent players are tracked by jersey number only. Notes are yours: click one to change it.</div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2 class="card-title">Games against them</h2>
+      <div class="game-cards" id="games"></div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="team_parts.js"></script>
+<script src="team.js"></script>
+</body>
+</html>

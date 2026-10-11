@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annotate · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* this page only: the box editor and its side cards, as the mockup draws them */
+  .train-main { padding: 24px 28px 48px; gap: 16px; }
+  .page-head { gap: 12px; }
+  .head-progress { margin-left: auto; display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+  .head-progress-words { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 700; }
+  .head-progress-words .where { color: var(--muted); font-weight: 500; }
+  .two-col { gap: 16px; }
+  .two-col > .editor-col { flex: 3 1 600px; display: flex; flex-direction: column; gap: 10px; }
+  .two-col > .side-cards { flex: 1 1 260px; display: flex; flex-direction: column; gap: 14px; }
+  .side-cards .card { border-radius: 12px; padding: 16px; gap: 8px; }
+  .side-cards .card-title { font-size: 16px; }
+
+  .editor { position: relative; aspect-ratio: 16 / 9; background: #1b1b1f; border-radius: 10px; overflow: hidden; cursor: crosshair; user-select: none; touch-action: none; }
+  .editor.drawing { cursor: cell; }
+  .editor img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+  .editor .boxes { position: absolute; inset: 0; }
+  .editor-words { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #8a8a90; font-weight: 600; text-align: center; padding: 24px; pointer-events: none; }
+  .editor-words a { color: #ffffff; pointer-events: auto; }
+  .box { position: absolute; border: 2px solid var(--box); border-radius: 3px; box-sizing: border-box; cursor: move; }
+  .box.unsure { border-style: dashed; }
+  .box.cls-Ball { border-width: 3px; border-radius: 4px; }
+  .box.selected { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 4px var(--box); z-index: 2; }   /* its handles stay on top of overlapping boxes */
+  .box .label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 2px; background: var(--box); color: #ffffff; font-size: 12px; font-weight: 700; padding: 1px 6px; border-radius: 3px; white-space: nowrap; line-height: 1.4; pointer-events: none; }
+  .box.cls-Ball .label { color: var(--ink); }
+  .box .handle { position: absolute; width: 12px; height: 12px; background: #ffffff; border: 2px solid var(--box); border-radius: 2px; display: none; }
+  .box.selected .handle { display: block; }
+  .handle.nw { left: -7px; top: -7px; cursor: nwse-resize; } .handle.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+  .handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; } .handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+  .draft { position: absolute; border: 2px dashed #ffffff; border-radius: 3px; pointer-events: none; }
+  .editor.empty .inset, .editor.empty .inset-words { display: none; }
+  .inset { position: absolute; right: 12px; bottom: 12px; width: 170px; height: 170px; background: #2b2b30; border: 3px solid #ffffff; border-radius: 8px; pointer-events: none; }
+  .inset-words { position: absolute; right: 12px; bottom: 186px; font-size: 11px; color: #c9d0db; background: rgba(27, 27, 31, 0.8); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+  .answer-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .answer-row .hint { margin-left: auto; }
+  .class-list { display: flex; flex-direction: column; gap: 8px; }
+  .class-list .class-row { width: 100%; cursor: pointer; }
+  .this-picture { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+  .this-picture > div { display: flex; justify-content: space-between; gap: 10px; }
+  .this-picture .k { color: var(--muted); }
+  .this-picture .v { font-weight: 600; text-align: right; }
+  .filmstrip > a { position: relative; display: block; }
+  .filmstrip .dot { position: absolute; right: 6px; top: 6px; width: 8px; height: 8px; }
+  @media (max-width: 760px) { .train-main { padding: 20px 16px 40px; } .inset { width: 110px; height: 110px; } .inset-words { display: none; } }
+</style>
+</head>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+    <div class="page-head middle">
+      <h1 class="title title-small">Annotate</h1>
+      <div class="segment" id="modes" role="group" aria-label="Which pictures first">
+        <button type="button" data-mode="hard" class="on">Hard pictures first</button>
+        <button type="button" data-mode="order">In order</button>
+        <button type="button" data-mode="unsure">Only unsure</button>
+      </div>
+      <div class="head-progress">
+        <div class="head-progress-words"><span id="progress-words">…</span><span class="where" id="progress-where"></span></div>
+        <div class="progress progress-yellow"><span id="progress-bar" style="width: 0%"></span></div>
+      </div>
+    </div>
+
+    <div class="two-col stretch">
+      <section class="editor-col">
+        <div class="editor" id="editor">
+          <img id="picture" alt="" hidden>
+          <div class="boxes" id="boxes"></div>
+          <div class="draft" id="draft" hidden></div>
+          <canvas class="inset" id="inset" width="170" height="170" aria-hidden="true"></canvas>
+          <span class="inset-words" id="inset-words" hidden>3× around the pointer</span>
+          <div class="editor-words" id="editor-words">Loading the pictures...</div>
+        </div>
+        <div class="answer-row">
+          <button class="btn btn-green btn-big" id="btn-right" type="button">Looks right · next <span class="key">(Space)</span></button>
+          <button class="btn btn-outline-dark btn-big" id="btn-noball" type="button">No ball here <span class="key">(N)</span></button>
+          <button class="btn btn-outline btn-big" id="btn-skip" type="button">Can't tell <span class="key">(S)</span></button>
+          <button class="btn btn-outline btn-big" id="btn-undo" type="button">Undo <span class="key">(Z)</span></button>
+          <span class="hint">Drag a box to fix it · click a box and press Delete to remove it · draw a new box with B</span>
+        </div>
+      </section>
+
+      <aside class="side-cards">
+        <section class="card">
+          <div class="card-head middle">
+            <h2 class="card-title">Label assist</h2>
+            <label class="check" style="min-height: 0"><input type="checkbox" id="assist" checked>On</label>
+          </div>
+          <div class="hint" id="assist-words">The model draws its guesses. Solid boxes are sure; dashed ones need your call.</div>
+        </section>
+        <section class="card">
+          <h2 class="card-title">Classes</h2>
+          <div class="class-list" id="classes"></div>
+        </section>
+        <section class="card">
+          <h2 class="card-title">This picture</h2>
+          <div class="this-picture">
+            <div><span class="k">Game</span><span class="v" id="pic-game">—</span></div>
+            <div><span class="k">Time</span><span class="v" id="pic-time">—</span></div>
+            <div><span class="k">Condition</span><span class="v" id="pic-condition">—</span></div>
+            <div><span class="k">Why it's here</span><span class="v" id="pic-reason">—</span></div>
+          </div>
+        </section>
+        <section class="card">
+          <h2 class="card-title">Shots for the clip model</h2>
+          <div class="hint" id="shots-words">Every shot tagged in game analysis is already a labelled 3-second clip.</div>
+        </section>
+      </aside>
+    </div>
+
+    <div class="filmstrip" id="filmstrip"></div>
+  </main>
+</div>
+<script src="app.js"></script>
+<script src="annotate.js"></script>
+</body>
+</html>

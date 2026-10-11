@@ -3,173 +3,73 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Train the model · Hoops Tracker</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<title>Training overview · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 <style>
-/* Only what this screen needs beyond app.css: the picture to click in, its enlarged view and the yellow box. */
-.label-pane { position: relative; aspect-ratio: 16 / 9; background: var(--dark-pane); border-radius: 12px; overflow: hidden;
-              display: flex; align-items: center; justify-content: center; color: #b9b3b5; font-weight: 600; cursor: crosshair;
-              user-select: none; -webkit-user-select: none; }
-.label-pane img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-.label-pane .pane-words { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-                          justify-content: center; gap: 14px; text-align: center; padding: 24px; cursor: default; }
-.label-pane .pane-words .pick-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
-.label-pane .pane-words input { width: 90px; min-height: 44px; text-align: center; font-weight: 700; }
-.ball-box { position: absolute; border: 3px solid #ffd21f; border-radius: 4px; pointer-events: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
-.ball-box.guess { border: 2px dashed #ffffff; box-shadow: none; }
-.guess-word { position: absolute; color: #ffffff; font-size: 13px; font-weight: 700; text-shadow: 0 0 3px #000; pointer-events: none; white-space: nowrap; }
-.inset { position: absolute; right: 16px; bottom: 16px; width: 240px; height: 240px; background: #3a3436; border: 3px solid #ffffff;
-         border-radius: 10px; overflow: hidden; cursor: crosshair; background-repeat: no-repeat; image-rendering: auto; }
-.inset.on-left { right: auto; left: 16px; }
-.inset .ball-box { border-width: 4px; }
-.inset-words { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(20, 17, 18, 0.75); color: #ffffff; font-size: 13px;
-               text-align: center; padding: 4px 6px; pointer-events: none; }
-.answered-chip { position: absolute; left: 16px; top: 16px; }
-.answer-row { display: flex; flex-wrap: wrap; gap: 12px; }
-.answer-row .btn-save { flex: 2 1 200px; }
-.answer-row .btn-noball { flex: 1 1 150px; font-size: 18px; }
-.answer-row .btn-skip { flex: 1 1 120px; font-size: 18px; border-color: var(--grey); }
-.answer-row .btn-back { min-width: 64px; border-color: var(--grey); }
-.size-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 15px; }
-.size-row .btn { min-height: 40px; padding: 0 14px; }
-.keys { font-size: 14px; color: var(--muted); }
-.keys kbd { display: inline-block; min-width: 22px; text-align: center; padding: 1px 6px; border: 1px solid var(--grey); border-radius: 5px;
-            background: var(--card); font-family: inherit; font-weight: 700; font-size: 13px; }
-.steps { display: flex; flex-direction: column; gap: 14px; }
-.step { display: flex; align-items: center; gap: 12px; }
-.step-number { width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: var(--soft); display: flex; flex: none;
-               align-items: center; justify-content: center; font-weight: 800; }
-.step-number.done { background: var(--green); color: #ffffff; }
-.step-number.now { background: var(--ink); color: #ffffff; }
-.step-text { flex-grow: 1; min-width: 0; }
-.step-title { font-weight: 700; }
-.step-note { font-size: 14px; color: var(--muted); }
-.step .btn { min-height: 44px; padding: 0 16px; font-size: 15px; border-radius: 8px; }
-.model { border: 1px solid #cfc9c3; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.model.in-use { border: 2px solid var(--ink); }
-.model .model-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.model .model-name { font-weight: 700; font-size: 17px; }
-.model .btn { min-height: 44px; padding: 0 14px; font-size: 14px; border-radius: 8px; }
-.model .progress { height: 10px; }
-.model .progress-grey > span { background: #6b6567; }
-.model .score { font-size: 15px; font-weight: 600; }
-.zip-box { background: var(--paper); border-radius: 8px; padding: 10px 12px; font-size: 14px; word-break: break-all; }
-.switch { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 16px; cursor: pointer; }
-.switch input { width: 22px; height: 22px; accent-color: var(--green); margin: 0; }
-@media (max-width: 640px) {
-  .inset { width: 160px; height: 160px; right: 10px; bottom: 10px; }
-}
+  /* this page only */
+  .train-main { padding: 32px 36px 56px; gap: 24px; }
+  .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .health-grid h3 { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+  .bar-rows .progress { height: 8px; }
+  .progress-rare > span { background: var(--red); }
+  .need-more { color: var(--red-dark); }
+  .next-steps { display: flex; flex-direction: column; gap: 12px; }
+  .next-steps .lead-row.boxed:hover { border-color: var(--line-strong); }
+  .next-steps .lead-number { width: 36px; height: 36px; }
+  .step .value { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+  .step .value .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 760px) { .train-main { padding: 20px 16px 40px; } }
 </style>
 </head>
-<body>
-<header class="site-header" id="site-header"></header>
-
-<main class="page">
-  <div class="page-head">
-    <div class="head-text">
-      <h1 class="title">Train the model</h1>
-      <div class="subtitle">Click the ball in each picture. A few hundred pictures teach the tool to find it.</div>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+    <div class="page-head">
+      <div class="head-text">
+        <h1 class="title">Ball and referee detector</h1>
+        <div class="subtitle" id="subtitle">Project · 4 classes: Ball, Referee, Player, Hoop</div>
+      </div>
     </div>
-    <div class="head-side" style="flex-direction: column; align-items: stretch; gap: 6px; min-width: 240px">
-      <div class="progress-row" style="font-weight: 700"><span id="done-words">Loading...</span><span class="muted" style="font-weight: 500" id="game-words"></span></div>
-      <div class="progress progress-red"><span id="done-bar"></span></div>
+
+    <ol class="steps" id="steps">
+      <li class="step"><div class="eyebrow">1 Upload</div><div class="value" id="step-upload">…</div><div class="what" id="step-upload-what">pictures from your games</div></li>
+      <li class="step"><div class="eyebrow">2 Annotate</div><div class="value" id="step-annotate">…</div><div class="what">checked by you</div></li>
+      <li class="step"><div class="eyebrow">3 Dataset</div><div class="value" id="step-dataset">…</div><div class="what" id="step-dataset-what">not built yet</div></li>
+      <li class="step"><div class="eyebrow">4 Train</div><div class="value">Colab</div><div class="what">not running</div></li>
+      <li class="step"><div class="eyebrow">5 Models</div><div class="value" id="step-models">…</div><div class="what" id="step-models-what">the model the analysis side runs</div></li>
+    </ol>
+
+    <div class="two-col">
+      <section class="card col-main">
+        <div class="card-head">
+          <h2 class="card-title">Dataset health</h2>
+          <a href="dataset.html" class="card-link-right">Details →</a>
+        </div>
+        <div class="health-grid">
+          <div>
+            <h3>Labels per class</h3>
+            <div class="bar-rows" id="classes"></div>
+          </div>
+          <div>
+            <h3>Pictures by condition</h3>
+            <div class="fact-list" id="conditions"></div>
+          </div>
+        </div>
+        <div class="callout" id="health-note">Reading the labels...</div>
+        <div class="hint" id="assist-note" hidden></div>
+      </section>
+
+      <section class="card col-side">
+        <h2 class="card-title">Next steps</h2>
+        <div class="next-steps" id="next-steps"></div>
+        <div class="hint">Everything here is separate from game analysis. The model you choose "in use" is what the analysis side runs.</div>
+      </section>
     </div>
-  </div>
-
-  <div class="two-col">
-    <section class="col-main" style="display: flex; flex-direction: column; gap: 14px">
-      <div class="label-pane" id="pane">
-        <img id="picture" alt="" hidden>
-        <div class="ball-box guess" id="guess-box" hidden></div>
-        <div class="guess-word" id="guess-word" hidden>the detector's guess (often wrong)</div>
-        <div class="ball-box" id="ball-box" hidden></div>
-        <div class="inset" id="inset" hidden>
-          <div class="ball-box" id="inset-box" hidden></div>
-          <div class="inset-words" id="inset-words">Click the middle of the ball here</div>
-        </div>
-        <span class="chip chip-dark answered-chip" id="answered-chip" hidden></span>
-        <div class="pane-words" id="pane-words">Loading the picture...</div>
-      </div>
-
-      <div class="answer-row" id="answer-row" hidden>
-        <button class="btn btn-green btn-tall btn-save" id="btn-save" type="button">Save and next</button>
-        <button class="btn btn-outline btn-tall btn-noball" id="btn-noball" type="button">No ball visible</button>
-        <button class="btn btn-outline btn-tall btn-skip" id="btn-skip" type="button">Can't tell</button>
-        <button class="btn btn-light btn-tall btn-back" id="btn-back" type="button" aria-label="Back one picture" title="Back one picture (B)">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg>
-        </button>
-      </div>
-
-      <div class="size-row" id="size-row" hidden>
-        <span style="font-weight: 600" id="size-words">Box size: 30 px</span>
-        <button class="btn btn-light" id="btn-smaller" type="button" title="Smaller (-)">&minus; Smaller</button>
-        <button class="btn btn-light" id="btn-larger" type="button" title="Larger (+)">+ Larger</button>
-        <button class="btn btn-light" id="btn-guess" type="button" hidden>Use the guess</button>
-        <button class="btn btn-link" id="btn-undo" type="button" hidden>Undo my last answer</button>
-        <span class="keys push">Keys: <kbd>S</kbd> save · <kbd>N</kbd> no ball · <kbd>C</kbd> can't tell · <kbd>B</kbd> back · <kbd>+</kbd> <kbd>&minus;</kbd> box size</span>
-      </div>
-
-      <section class="card" id="game-card">
-        <div class="card-row">
-          <h2 class="card-title-small">This game</h2>
-          <span class="chip chip-grey" id="game-chip">No frames yet</span>
-        </div>
-        <div class="row" id="pick-row">
-          <label for="pick-count" style="font-weight: 600">Pick frames from this game</label>
-          <input class="input" id="pick-count" type="number" min="1" max="2000" step="10" value="150" style="width: 110px; text-align: center">
-          <button class="btn btn-outline" id="btn-pick" type="button">Pick frames</button>
-          <span class="hint" id="pick-hint">Spread over the whole video, at least a second apart. Asking for more later adds some.</span>
-        </div>
-        <div id="pick-progress" hidden>
-          <div class="progress-row"><span id="pick-words">Picking...</span><span class="muted" id="pick-left"></span></div>
-          <div class="progress progress-blue progress-thin" style="margin-top: 6px"><span id="pick-bar"></span></div>
-        </div>
-        <label class="switch"><input type="checkbox" id="keep-test"><span><b>Keep this game for testing.</b> None of its pictures are used for training, so the model's score is honest.</span></label>
-        <div class="hint" id="split-words"></div>
-      </section>
-    </section>
-
-    <aside class="col-side" style="display: flex; flex-direction: column; gap: 16px">
-      <section class="card">
-        <h2 class="card-title-small">From labels to a model</h2>
-        <div class="steps">
-          <div class="step">
-            <span class="step-number now" id="step1">1</span>
-            <div class="step-text"><div class="step-title">Label pictures</div><div class="step-note" id="step1-note">Loading...</div></div>
-          </div>
-          <div class="step">
-            <span class="step-number" id="step2">2</span>
-            <div class="step-text"><div class="step-title">Make the zip for Google Drive</div><div class="step-note" id="step2-note">Packs the labelled pictures into one file</div></div>
-            <button class="btn btn-red" id="btn-zip" type="button">Make the zip</button>
-          </div>
-          <div id="zip-progress" hidden>
-            <div class="progress-row small"><span id="zip-words">Packing...</span></div>
-            <div class="progress progress-blue progress-thin" style="margin-top: 6px"><span id="zip-bar"></span></div>
-          </div>
-          <div class="zip-box" id="zip-box" hidden></div>
-          <div class="step">
-            <span class="step-number" id="step3">3</span>
-            <div class="step-text"><div class="step-title">Train on Colab</div><div class="step-note">Upload the zip and the notebook to Colab; press Run all there</div></div>
-            <a class="btn btn-outline" href="/api/settings/notebook" download="train_ball_model.ipynb" id="btn-notebook">Get the notebook</a>
-          </div>
-          <div class="step">
-            <span class="step-number" id="step4">4</span>
-            <div class="step-text"><div class="step-title">New model comes back</div><div class="step-note">Download <b>ball_model_v&lt;n&gt;.pt</b> and its scores file from Drive into the <b>models</b> folder (next to the data folder that Settings &gt; Storage shows). It then shows up below.</div></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card" style="gap: 12px">
-        <h2 class="card-title-small">Ball models</h2>
-        <div id="models-list" class="stack" style="gap: 12px"><span class="hint">Looking in the models folder...</span></div>
-        <div class="hint" id="models-note">Scores come from the test pictures: honest only when one game was kept aside and never used for training.</div>
-        <div class="hint">Using a ball model when a game is processed is the next stage: for now "In use" only marks your choice.</div>
-      </section>
-    </aside>
-  </div>
-</main>
+  </main>
+</div>
 <script src="app.js"></script>
 <script src="train.js"></script>
 </body>

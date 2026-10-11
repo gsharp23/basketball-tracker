@@ -1,24 +1,21 @@
-/* The start page: the school's logo, artwork and name from /api/branding, and the data folder line. */
+/* The start page: the school's logo, name and artwork from /api/branding, and the data folder line.
+   It is the only door between the two areas (Game analysis, Model training). */
 
 async function showBranding() {
   const info = await api('/api/branding');
-  const name = info.school_name, mascot = info.mascot;
   if (info.logo_url) {
     const plate = document.getElementById('plate-logo');
     plate.className = 'plate-logo has-logo';
     plate.replaceChildren(el('img', { src: info.logo_url, alt: 'school logo' }));
   }
-  document.getElementById('plate-name').textContent = name || info.title;
-  if (info.hero_url) {
-    const hero = document.getElementById('hero');
-    hero.className = 'hero';
-    hero.replaceChildren(el('img', { src: info.hero_url, alt: 'team artwork' }));
-  }
-  document.getElementById('mascot').textContent = mascot || name || info.title;
   const line = document.getElementById('school-line');
-  if (mascot && name) line.textContent = name + ' · ' + info.title;
-  else if (name) line.textContent = info.title;
-  else line.textContent = 'Game video in, coaching numbers out';
+  const words = [info.school_name, info.mascot].filter(Boolean);
+  line.textContent = words.length ? words.join(' · ') : 'Game video in, coaching numbers out';
+  if (info.hero_url) {
+    const art = document.getElementById('door-art');
+    art.className = 'door-art has-art';
+    art.replaceChildren(el('img', { src: info.hero_url, alt: 'team artwork' }));
+  }
 }
 
 async function showStorage() {
