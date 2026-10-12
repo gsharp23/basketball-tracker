@@ -8,8 +8,12 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 <style>
-  /* This screen's own one rule; everything else comes from app.css. */
+  /* This screen's own rules; everything else comes from app.css. */
   #game-rows td:nth-child(-n+3) { white-space: nowrap; }     /* the date, opponent and result never wrap */
+  .season-pick { min-height: 44px; font-weight: 600; min-width: 170px; max-width: 280px; }
+  #game-rows td:last-child { white-space: nowrap; }          /* the links never wrap letter by letter */
+  #game-rows .actions { flex-wrap: nowrap; }
+  #game-rows .today { box-shadow: inset 4px 0 0 var(--accent, #d81e27); }
 </style>
 </head>
 <body class="area-analysis">
@@ -18,22 +22,54 @@
 <main class="page">
   <div class="page-head">
     <div class="head-text">
-      <a href="seasons.html" class="back-link">← Seasons</a>
+      <label class="back-link" for="season-pick">Season</label>
       <h1 class="title title-big" id="season-title">Season</h1>
     </div>
     <div class="head-side">
+      <select id="season-pick" class="input season-pick" aria-label="Choose a season"></select>
       <button class="btn btn-outline" id="make-current" type="button" hidden>Make this the current season</button>
-      <button class="btn btn-red" id="add-game" type="button">Add a game</button>
+      <button class="btn btn-red" id="add-fixture" type="button">Add a game</button>
       <button class="btn btn-outline" id="open-roster" type="button">Roster</button>
     </div>
   </div>
 
+  <!-- "Add a game": a game on the schedule, with or without a video yet -->
+  <section class="card" id="fixture-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title" id="fixture-title">Add a game to the schedule</h2>
+      <button class="btn btn-light btn-sm" id="fixture-close" type="button">Close</button>
+    </div>
+    <form id="fixture-form" class="stack" style="gap: 14px">
+      <div class="form-grid">
+        <div class="field"><label for="fixture-date">Date</label><input id="fixture-date" type="date" required></div>
+        <div class="field"><label for="fixture-time">Tip-off</label><input id="fixture-time" type="time"></div>
+        <div class="field"><label for="fixture-opponent">Opponent</label><input id="fixture-opponent" type="text" list="team-names" maxlength="60" placeholder="Who the game is against"></div>
+        <div class="field"><label>Home or away</label>
+          <div class="segment" id="fixture-home"><button type="button" data-home="true">Home</button><button type="button" data-home="false">Away</button></div>
+        </div>
+        <div class="field"><label for="fixture-kind">Kind</label>
+          <select id="fixture-kind" class="input"><option value="">—</option><option value="league">League</option><option value="non-league">Non-league</option><option value="tournament">Tournament</option></select>
+        </div>
+        <div class="field"><label for="fixture-us">Final score (us – them)</label>
+          <div class="score-row"><input id="fixture-us" class="input" type="text" inputmode="numeric" placeholder="Us"><span>–</span><input id="fixture-them" class="input" type="text" inputmode="numeric" placeholder="Them"></div>
+        </div>
+        <div class="field"><label for="fixture-stem">Video</label><select id="fixture-stem" class="input"><option value="">No video yet</option></select></div>
+        <div class="field"><label for="fixture-note">Note</label><input id="fixture-note" type="text" maxlength="120" placeholder="Tournament name, a reminder..."></div>
+      </div>
+      <div class="row">
+        <button class="btn btn-red" type="submit" id="fixture-save">Save</button>
+        <button class="btn btn-link small" type="button" id="fixture-delete" hidden>Take this game off the schedule</button>
+        <span class="hint">A new opponent name makes a team on the Teams screen. A video linked here takes the game's date, opponent and score.</span>
+      </div>
+    </form>
+  </section>
+
   <div class="callout" id="provisional-note" hidden>A game in this season had its court marked with stand-in clicks, so every number worked out from positions (the shot map, distances) is provisional until the court is marked by you.</div>
 
-  <!-- "Add a game": the plain steps and the form that puts a video in a season -->
+  <!-- "Edit" on a video that is on no scheduled game: put the video in a season with its opponent, date and score -->
   <section class="card" id="add-panel" hidden>
     <div class="card-head middle">
-      <h2 class="card-title">Add a game</h2>
+      <h2 class="card-title">A video's game</h2>
       <button class="btn btn-light btn-sm" id="add-close" type="button">Close</button>
     </div>
     <ol class="steps-list">
@@ -113,15 +149,18 @@
 
   <div class="two-col">
     <section class="card col-main">
-      <h2 class="card-title">Games</h2>
+      <div class="card-head">
+        <h2 class="card-title">Schedule</h2>
+        <span class="card-note" id="schedule-count"></span>
+      </div>
       <div class="table-wrap">
-        <table class="table" style="min-width: 560px">
-          <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Status</th><th></th></tr></thead>
+        <table class="table" style="min-width: 700px">
+          <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Video</th><th></th></tr></thead>
           <tbody id="game-rows"></tbody>
         </table>
       </div>
       <div class="hint" id="games-note" hidden></div>
-      <div class="callout callout-red" id="colab-note" hidden></div>
+      <div class="hint">Stats come from the games with a video. Videos are processed on the <a href="games.html">Games</a> screen; link one to its game with Edit.</div>
     </section>
     <section class="card col-side">
       <h2 class="card-title">Leaders</h2>

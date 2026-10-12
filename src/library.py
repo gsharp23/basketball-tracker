@@ -10,9 +10,14 @@ answers the browser with them; the screen modules (api_*.py) call them for their
 The files (all under data/, never in git)
     data/_library/seasons.json
         {"seasons": {"<id>": {"name": "2026-27", "start": "2026-11-01", "current": true,
-                              "roster": {"name": "<our team name>", "players": {"5": "Name"}}}},
+                              "roster": {"name": "<our team name>", "players": {"5": "Name"}},
+                              "schedule": [{"id": "2026-11-10-oak-city", "date": "2026-11-10", "time": "16:15",
+                                            "opponent_id": "oak-city", "home": true, "score_us": null, "score_them": null,
+                                            "stem": null, "kind": "league", "note": ""}]}},
          "roster_imported": true}        (set once the old root roster.json has been copied in)
-        Ids are short slugs made from the name ("2026-27"). Exactly one season is current.
+        Ids are short slugs made from the name ("2026-27"). Exactly one season is current. The schedule is
+        the season's fixtures, with or without a video: "stem" names the video once one is linked, and from
+        then on the game's game_info.json and the fixture are kept the same (date, opponent, home, scores).
     data/_library/teams.json
         {"teams": {"<id>": {"name": "Riverside", "short": "RIV", "colour": "#1d5fbf",
                             "notes": {"10": "Goes left"}}}}       the opponents; our own team is not a row
@@ -123,10 +128,12 @@ def clean_season(saved):
     saved = saved if isinstance(saved, dict) else {}
     roster = saved.get("roster") if isinstance(saved.get("roster"), dict) else {}
     players = roster.get("players") if isinstance(roster.get("players"), dict) else {}
+    schedule = saved.get("schedule") if isinstance(saved.get("schedule"), list) else []
     return {"name": str(saved.get("name") or "").strip() or "Season", "start": str(saved.get("start") or ""),
             "current": bool(saved.get("current")),
             "roster": {"name": str(roster.get("name") or ""),
-                       "players": {str(number): str(name) for number, name in players.items()}}}
+                       "players": {str(number): str(name) for number, name in players.items()}},
+            "schedule": [row for row in (clean_fixture(entry) for entry in schedule) if row["id"]]}
 
 
 def load_seasons():
@@ -517,8 +524,11 @@ def check_info(stem, changes):
     return clean
 
 
-def save_game_info(stem, changes, check=True):
-    """Change some keys of a game's game_info.json (the others are kept) and return the whole thing."""
+def save_game_info(stem, changes, check=True, mirror=True):
+    """Change some keys of a game's game_info.json (the others are kept) and return the whole thing.
+
+    The game's fixture on the schedule, if it has one, takes the same date, home, opponent and scores
+    (mirror=False when the fixture is the one writing, so the two never call each other)."""
     if not video_of(stem):
         raise Problem("That game is not in the clips folder any more.")
     clean = check_info(stem, changes) if check else changes
@@ -527,6 +537,8 @@ def save_game_info(stem, changes, check=True):
     saved = saved if isinstance(saved, dict) else {}
     saved.update(clean)
     write_file(path, saved)
+    if mirror and any(key in clean for key in FIXTURE_GAME_KEYS + ("season_id",)):
+        mirror_game_into_fixture(stem, dict(clean, season_id=saved.get("season_id")))
     return game_info(stem)
 
 
@@ -564,6 +576,225 @@ def games_in(season_id=None, team_id=None):
         found.append(game)
     found.sort(key=lambda game: (game["info"]["date"], game["name"]))
     return found
+
+
+# ---------------------------------------------------------------- the schedule (the season's fixtures)
+
+FIXTURE_KINDS = ("", "league", "non-league", "tournament")
+FIXTURE_GAME_KEYS = ("date", "home", "opponent_id", "score_us", "score_them")     # kept the same in game_info.json
+
+
+def clean_fixture(saved):
+    """One fixture row with every key present and of the right kind (an id of "" means: drop it)."""
+    saved = saved if isinstance(saved, dict) else {}
+
+    def score(value):
+        try:
+            return int(value) if value is not None and str(value).strip() != "" else None
+        except (TypeError, ValueError):
+            return None
+    return {"id": str(saved.get("id") or ""), "date": str(saved.get("date") or ""), "time": str(saved.get("time") or "")[:5],
+            "opponent_id": str(saved.get("opponent_id") or "") or None,
+            "home": None if saved.get("home") is None else bool(saved.get("home")),
+            "score_us": score(saved.get("score_us")), "score_them": score(saved.get("score_them")),
+            "stem": str(saved.get("stem") or "") or None,
+            "kind": saved.get("kind") if saved.get("kind") in FIXTURE_KINDS else "",
+            "note": str(saved.get("note") or "")[:120]}
+
+
+def check_time(text):
+    text = str(text or "").strip()
+    if not text:
+        return ""
+    try:
+        return datetime.time.fromisoformat(text).strftime("%H:%M")
+    except ValueError:
+        raise Problem("The time should look like 16:15 (24-hour clock).")
+
+
+def check_fixture_changes(season, fixture, changes):
+    """The changes to a fixture as the page sends them, checked, applied onto `fixture` (a copy is returned)."""
+    row = dict(fixture)
+    if "date" in changes:
+        row["date"] = check_date(changes["date"])
+        if not row["date"]:
+            raise Problem("A scheduled game needs a date.")
+    if "time" in changes:
+        row["time"] = check_time(changes["time"])
+    if "opponent_id" in changes or "opponent" in changes:
+        team_id = changes.get("opponent_id") or None
+        if team_id and team_id not in load_teams()["teams"]:
+            raise Problem("There is no such team. Reload the page.")
+        if not team_id and str(changes.get("opponent") or "").strip():
+            team_id = team_or_create(str(changes["opponent"]).strip()[:60])
+        if not team_id:
+            raise Problem("Name the opponent.")
+        row["opponent_id"] = team_id
+    if "home" in changes:
+        row["home"] = None if changes["home"] is None else bool(changes["home"])
+    for key, what in (("score_us", "Our"), ("score_them", "Their")):
+        if key in changes:
+            row[key] = check_score(changes[key], what)
+    if "kind" in changes:
+        kind = str(changes["kind"] or "")
+        if kind not in FIXTURE_KINDS:
+            raise Problem("The kind of game is league, non-league or tournament.")
+        row["kind"] = kind
+    if "note" in changes:
+        row["note"] = str(changes["note"] or "").strip()[:120]
+    if "stem" in changes:
+        stem = str(changes["stem"] or "").strip() or None
+        if stem and not video_of(stem):
+            raise Problem("That video is not in the clips folder.")
+        if stem and any(other["stem"] == stem and other["id"] != row["id"] for other in season["schedule"]):
+            raise Problem("That video is already linked to another game of this season.")
+        row["stem"] = stem
+    return row
+
+
+def fixture_or_problem(season, fixture_id):
+    for row in season["schedule"]:
+        if row["id"] == fixture_id:
+            return row
+    raise Problem("That scheduled game is not in the season any more. Reload the page.")
+
+
+def fixture_of_stem(stem):
+    """(season_id, fixture) of the fixture a video is linked to, or (None, None)."""
+    for season_id, season in load_seasons()["seasons"].items():
+        for row in season["schedule"]:
+            if row["stem"] == stem:
+                return season_id, row
+    return None, None
+
+
+def push_fixture_into_game(season_id, fixture):
+    """A linked video takes the fixture's season, opponent, date, home and scores (the game's own typed score wins)."""
+    stem = fixture["stem"]
+    if not stem or not video_of(stem):
+        return
+    changes = {"season_id": season_id, "opponent_id": fixture["opponent_id"], "date": fixture["date"], "home": fixture["home"]}
+    info = game_info(stem)
+    if info["score_us"] is None and info["score_them"] is None:
+        changes["score_us"], changes["score_them"] = fixture["score_us"], fixture["score_them"]
+    save_game_info(stem, changes, mirror=False)
+
+
+def mirror_game_into_fixture(stem, info):
+    """What the coach typed on a game (date, home, opponent, scores) is copied into its fixture, if it has one."""
+    data = load_seasons()
+    for season_id, season in data["seasons"].items():
+        for row in season["schedule"]:
+            if row["stem"] != stem:
+                continue
+            if info.get("season_id") not in (None, season_id):
+                row["stem"] = None                          # the game moved to another season: the fixture lets go
+            else:
+                for key in FIXTURE_GAME_KEYS:
+                    if key in info and (info[key] is not None or key in ("score_us", "score_them")):
+                        row[key] = info[key]
+            save_seasons(data)
+            return
+
+
+def add_fixture(season_id, fields):
+    """Add a game to a season's schedule and return the fixture. fields: date, time, opponent (name) or opponent_id,
+    home, score_us, score_them, kind, note, stem (a video to link)."""
+    data = load_seasons()
+    season = season_or_problem(data["seasons"], season_id)
+    row = check_fixture_changes(season, clean_fixture({"id": "new"}), dict(fields))
+    if not row["date"]:
+        raise Problem("A scheduled game needs a date.")
+    if not row["opponent_id"]:
+        raise Problem("Name the opponent.")
+    team = load_teams()["teams"][row["opponent_id"]]
+    row["id"] = new_id(f"{row['date']}-{team['name']}", {other["id"] for other in season["schedule"]})
+    season["schedule"].append(row)
+    season["schedule"].sort(key=lambda entry: (entry["date"], entry["time"]))
+    save_seasons(data)
+    if row["stem"]:
+        push_fixture_into_game(season_id, row)
+    return row
+
+
+def update_fixture(season_id, fixture_id, changes):
+    """Change a fixture (any of its fields; "stem" links or unlinks a video) and return it."""
+    data = load_seasons()
+    season = season_or_problem(data["seasons"], season_id)
+    old = fixture_or_problem(season, fixture_id)
+    row = check_fixture_changes(season, old, changes if isinstance(changes, dict) else {})
+    season["schedule"][season["schedule"].index(old)] = row
+    season["schedule"].sort(key=lambda entry: (entry["date"], entry["time"]))
+    save_seasons(data)
+    if row["stem"]:
+        push_fixture_into_game(season_id, row)
+    return row
+
+
+def delete_fixture(season_id, fixture_id):
+    """Take a game off the schedule. A linked video stays in the season (as an unscheduled game)."""
+    data = load_seasons()
+    season = season_or_problem(data["seasons"], season_id)
+    row = fixture_or_problem(season, fixture_id)
+    season["schedule"].remove(row)
+    save_seasons(data)
+
+
+def import_schedule(season_id, rows):
+    """Add many fixtures at once (a schedule typed or read from a screenshot). A game on the same date against the
+    same opponent is already there and is skipped. Returns (added, skipped)."""
+    added = skipped = 0
+    for fields in rows:
+        fields = dict(fields)
+        opponent = str(fields.get("opponent") or "").strip()
+        date = check_date(fields.get("date"))
+        season = load_seasons()["seasons"][season_id]
+        teams = load_teams()["teams"]
+        same = [row for row in season["schedule"] if row["date"] == date
+                and teams.get(row["opponent_id"], {}).get("name", "").lower() == opponent.lower()]
+        if same:
+            skipped += 1
+            continue
+        add_fixture(season_id, fields)
+        added += 1
+    return added, skipped
+
+
+def schedule_rows(season_id):
+    """The season's games in date order: every fixture (with its video's row when one is linked) and every
+    video of the season that is on no fixture ("unscheduled": True). Each row has the game_row keys where a
+    video exists, else result/points from the fixture's typed score and "stem": None."""
+    seasons = load_seasons()["seasons"]
+    teams = load_teams()["teams"]
+    games = {game["name"]: game for game in games_in(season_id=season_id)}
+    season = seasons.get(season_id) if season_id != UNASSIGNED else None
+    rows, linked = [], set()
+    for fixture in (season["schedule"] if season else []):
+        base = {"fixture_id": fixture["id"], "time": fixture["time"], "kind": fixture["kind"], "note": fixture["note"],
+                "unscheduled": False}
+        stem = fixture["stem"] if fixture["stem"] in games else None
+        if stem:
+            linked.add(stem)
+            row = dict(game_row(games[stem]), **base)
+        else:
+            typed = fixture["score_us"] is not None and fixture["score_them"] is not None
+            team = teams.get(fixture["opponent_id"]) or {}
+            row = dict(base, stem=None, video=None, name="", date=fixture["date"], date_is_guess=False, season_id=season_id,
+                       opponent=team.get("name", ""), opponent_id=fixture["opponent_id"], home=fixture["home"],
+                       status="no video", running=False, seconds=0, shots=0, stand_in_court=False, processed_on=None,
+                       roster_changed=False, score_us=fixture["score_us"], score_them=fixture["score_them"],
+                       tagged_us=0, tagged_them=0,
+                       points_us=fixture["score_us"] if typed else None, points_them=fixture["score_them"] if typed else None,
+                       points_from="scores" if typed else None, result=None)
+            if typed:
+                row["result"] = ("W" if fixture["score_us"] > fixture["score_them"]
+                                 else "L" if fixture["score_us"] < fixture["score_them"] else "T")
+        rows.append(row)
+    for stem, game in games.items():
+        if stem not in linked:
+            rows.append(dict(game_row(game), fixture_id=None, time="", kind="", note="", unscheduled=True))
+    rows.sort(key=lambda row: (row["date"] or "9999", row["time"], row.get("stem") or ""))
+    return rows
 
 
 # ---------------------------------------------------------------- reading one game's result files
@@ -877,8 +1108,9 @@ def leaders_of(players):
 def season_summary(season_id):
     """Everything the Season page shows (UNASSIGNED for the games in no season).
 
-    {"season": {"id", "name", "start", "current", "roster"}, "games": [game_row...] oldest first,
-     "games_count", "record" ({wins, losses, ties, text}: typed scores only),
+    {"season": {"id", "name", "start", "current", "roster"}, "games": [game_row...] oldest first (the videos),
+     "games_count", "schedule": schedule_rows() (every fixture and every video, oldest first),
+     "record" ({wins, losses, ties, text}: typed scores only, over the schedule),
      "points_per_game", "allowed_per_game" (typed scores, tagged points as a stand-in; None without either),
      "field_goals", "threes", "free_throws" ({made, tried, pct} over our tagged shots),
      "points_by_game": [{"stem", "label": "vs X", "us", "them", "from"}] for the chart,
@@ -888,12 +1120,14 @@ def season_summary(season_id):
     """
     seasons = load_seasons()["seasons"]
     if season_id == UNASSIGNED:
-        season = {"id": UNASSIGNED, "name": "Unassigned", "start": "", "current": False, "roster": {"name": "", "players": {}}}
+        season = {"id": UNASSIGNED, "name": "Unassigned", "start": "", "current": False, "roster": {"name": "", "players": {}},
+                  "schedule": []}
         names = roster_for(current_season_id())
     else:
         season = dict(season_or_problem(seasons, season_id), id=season_id)
         names = season["roster"]["players"]
     rows = [game_row(game) for game in games_in(season_id=season_id)]
+    schedule = schedule_rows(season_id)          # the fixtures, with the videos' rows where linked
     our_shots, marks = [], []
     for row in rows:
         who = sides(row["stem"])
@@ -902,11 +1136,14 @@ def season_summary(season_id):
             marks += marks_of(row["stem"], who["our_team"])
     tiles = score_tiles(our_shots)
     players = season_players(rows, names)
-    return {"season": season, "games": rows, "games_count": len(rows), "record": record_of(rows),
-            "points_per_game": per_game(rows, "points_us"), "allowed_per_game": per_game(rows, "points_them"),
+    played = [row for row in schedule if row["points_us"] is not None or row["points_them"] is not None]
+    return {"season": season, "games": rows, "games_count": len(rows), "schedule": schedule,
+            "record": record_of(schedule),
+            "points_per_game": per_game(schedule, "points_us"), "allowed_per_game": per_game(schedule, "points_them"),
             "field_goals": tiles["field_goals"], "threes": tiles["threes"], "free_throws": tiles["free_throws"],
-            "points_by_game": [{"stem": row["stem"], "label": f"vs {row['opponent']}" if row["opponent"] else row["stem"],
-                                "us": row["points_us"], "them": row["points_them"], "from": row["points_from"]} for row in rows],
+            "points_by_game": [{"stem": row["stem"], "label": f"vs {row['opponent']}" if row["opponent"] else (row["stem"] or row["date"]),
+                                "us": row["points_us"], "them": row["points_them"], "from": row["points_from"],
+                                "date": row["date"]} for row in played],
             "shots": {"count": len(our_shots), "marks": marks,
                       "court": court_of(rows[0]["stem"]) if rows else {"length_ft": config.COURT_LENGTH_FT, "width_ft": config.COURT_WIDTH_FT},
                       "shares": area_shares(marks)},

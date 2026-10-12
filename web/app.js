@@ -193,7 +193,7 @@ function brandBlock(areaWords) {
 
 /* ---- Game analysis: the header ---- */
 
-const NAV_LINKS = [['seasons', 'Seasons', 'seasons.html'], ['teams', 'Teams', 'teams.html'],
+const NAV_LINKS = [['seasons', 'Season', 'season.html'], ['teams', 'Teams', 'teams.html'],
                    ['games', 'Games', 'games.html'], ['players', 'Players', 'players.html']];
 
 // Fill <header id="site-header"> with the logo, the nav, the search box and "← Start page".

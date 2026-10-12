@@ -18,6 +18,12 @@ Routes in this module (all under /api)
     POST /api/seasons                body {"name", "start"?, "roster"?, "current"?} -> {"id", ...season}
     PUT  /api/seasons/{id}           body: any of name, start, current (true), roster {name, players {number: name}}
     DELETE /api/seasons/{id}         not the current one; its games become Unassigned
+    POST /api/seasons/{id}/schedule  a scheduled game: {"date", "time"?, "opponent" (name) or "opponent_id", "home"?,
+                                     "score_us"?, "score_them"?, "kind"? (league | non-league | tournament), "note"?,
+                                     "stem"? (link a video)} -> the fixture {"id", ...}
+    PUT  /api/seasons/{id}/schedule/{fixture_id}   any of those fields; {"stem": "<video>"} links a video, null unlinks
+    DELETE /api/seasons/{id}/schedule/{fixture_id}  (a linked video stays in the season, unscheduled)
+    POST /api/seasons/{id}/schedule/import          {"rows": [fixture fields...]} -> {"added", "skipped"}
     GET  /api/teams                  {"teams": [{"id", "name", "short", "colour", "notes", "games"}]}
     POST /api/teams                  body {"name", "short"?, "colour"?} -> {"id", ...team}
     PUT  /api/teams/{id}             body: any of name, short, colour, notes {number: text; "" removes}
@@ -86,6 +92,8 @@ the files yourself:
     shots_of(stem)   possessions_of(stem)   stats_of(stem)   court_of(stem)   marks_of(stem, label)
     score_tiles(shots)   player_rows(stem, label, names)   game_row(game)   record_of(rows)
     game_summary(stem)   season_summary(season_id)  ("unassigned" for the games in no season)   team_summary(team_id)
+    add_fixture(season_id, fields)   update_fixture(season_id, fixture_id, changes)   delete_fixture(season_id, fixture_id)
+    import_schedule(season_id, rows)   schedule_rows(season_id)   fixture_of_stem(stem)
     migrate()   UNASSIGNED
   Each function's docstring gives its return shape. "Our team" in a game is sides(stem)["our_team"], a colour label
   of teams.json (a colour word); player names come from the season's roster, never from roster.json.
@@ -300,6 +308,47 @@ def remove_season(season_id: str):
     except library.Problem as error:
         raise problem(error)
     return {"deleted": season_id}
+
+
+@router.post("/seasons/{season_id}/schedule")
+def add_fixture(season_id: str, body: dict):
+    """A game on the season's schedule: date, time, opponent (a name makes the team), home, scores, kind, note,
+    and stem to link a video at once."""
+    try:
+        return library.add_fixture(season_id, body if isinstance(body, dict) else {})
+    except library.Problem as error:
+        raise problem(error)
+
+
+@router.put("/seasons/{season_id}/schedule/{fixture_id}")
+def change_fixture(season_id: str, fixture_id: str, body: dict):
+    """Change a scheduled game; {"stem": "<video>"} links a video to it, {"stem": null} unlinks."""
+    try:
+        return library.update_fixture(season_id, fixture_id, body if isinstance(body, dict) else {})
+    except library.Problem as error:
+        raise problem(error)
+
+
+@router.delete("/seasons/{season_id}/schedule/{fixture_id}")
+def remove_fixture(season_id: str, fixture_id: str):
+    try:
+        library.delete_fixture(season_id, fixture_id)
+    except library.Problem as error:
+        raise problem(error)
+    return {"deleted": fixture_id}
+
+
+@router.post("/seasons/{season_id}/schedule/import")
+def import_schedule(season_id: str, body: dict):
+    """Many scheduled games at once: {"rows": [{"date", "time", "opponent", "home", "score_us", "score_them", "kind"}]}."""
+    rows = body.get("rows") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        raise HTTPException(400, "Send the games as a list of rows.")
+    try:
+        added, skipped = library.import_schedule(season_id, rows)
+    except library.Problem as error:
+        raise problem(error)
+    return {"added": added, "skipped": skipped}
 
 
 def teams_reply():

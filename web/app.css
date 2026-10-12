@@ -485,3 +485,6 @@ pre.log { font-size: 13px; line-height: 1.35; background: var(--bg); padding: 10
 
 /* A toolbar button that is switched on (the annotate page's Draw a box). */
 .btn.on { background: var(--ink, #111); color: #fff; border-color: var(--ink, #111); }
+
+/* A smaller chip beside a name (the schedule's Tournament mark). */
+.chip-sm { font-size: 11px; padding: 1px 7px; margin-left: 8px; vertical-align: middle; }

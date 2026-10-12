@@ -1,7 +1,9 @@
-/* One season: the five tiles, points by game, the season shot map, the games table with "Run here" and
-   "Run on Colab", the leaders, "Add a game" (putting a video in the season) and the roster.
-   Numbers come from GET /api/seasons/<id>/summary; writing goes through the shared routes.
-   The game rows, the runs and the "Add a game" panel are shared with the Games page: web/game_rows.js. */
+/* One season, the first screen of Game analysis: a dropdown to switch season, the five tiles, points by game,
+   the season shot map, the schedule (every game of the season, with or without a video), the leaders,
+   "Add a game" (a game on the schedule, a video linked or not) and the roster.
+   Numbers come from GET /api/seasons/<id>/summary; writing goes through the shared routes
+   (POST/PUT/DELETE /api/seasons/<id>/schedule...). Processing a video (Run on Colab) is the Games screen's job;
+   the "A video's game" panel for a video on no scheduled game is shared with it: web/game_rows.js. */
 
 let season = null;        // the row of /api/seasons (id, name, current, roster...)
 let summary = null;       // GET /api/seasons/<id>/summary
@@ -24,6 +26,25 @@ async function showTitle() {
   document.title = seasonName(season.name) + ' · Hoops Tracker';
   byId('make-current').hidden = season.current || season.id === 'unassigned';
   byId('open-roster').hidden = season.id === 'unassigned';
+  byId('add-fixture').hidden = season.id === 'unassigned';
+}
+
+// The dropdown at the top: every season, the current one marked, then "All seasons" (the library screen).
+async function fillSeasonPicker() {
+  const pick = byId('season-pick');
+  const reply = await api('/api/seasons');
+  const options = reply.seasons.map(function (row) {
+    return el('option', { value: row.id }, seasonName(row.name) + (row.current ? ' · current' : ''));
+  });
+  if (reply.unassigned) options.push(el('option', { value: 'unassigned' }, 'Unassigned videos (' + reply.unassigned + ')'));
+  options.push(el('option', { value: '__all' }, 'All seasons...'));
+  pick.replaceChildren.apply(pick, options);
+  pick.value = season.id;
+  pick.addEventListener('change', function () {
+    if (pick.value === '__all') { location.href = 'seasons.html'; return; }
+    rememberSeason(pick.value);
+    location.href = withParams('season.html', { season: pick.value });
+  });
 }
 
 function showTiles() {
@@ -116,22 +137,169 @@ function showShotMap() {
   byId('shots-note').textContent = shots.marks.length ? undrawnNote(shots.marks) : 'Shots are tagged on each game\'s page ("Tag shots and plays").';
 }
 
-/* ---- the games table (the rows, Run here and Run on Colab are in game_rows.js) ---- */
+/* ---- the schedule: every game of the season, with or without a video ---- */
 
 function matches(row) {
   if (!searchText) return true;
   return [row.opponent, row.stem, row.date, fmtDate(row.date), row.status_words].join(' ').toLowerCase().indexOf(searchText) >= 0;
 }
 
+function todayText() { return new Date().toISOString().slice(0, 10); }
+
+function fmtTime(text) {
+  const match = /^(\d{2}):(\d{2})$/.exec(text || '');
+  if (!match) return '';
+  const hours = Number(match[1]);
+  return (hours % 12 || 12) + ':' + match[2] + (hours >= 12 ? ' pm' : ' am');
+}
+
+// Date · time, with "home" or "away" after it; a date that is only the video file's day is grey.
+function whenCell(row) {
+  const where = row.home === true ? ' · home' : row.home === false ? ' · away' : '';
+  if (!row.date) return el('td', { class: 'muted' }, 'no date yet' + where);
+  const time = row.time ? el('span', { class: 'small muted' }, ' ' + fmtTime(row.time)) : null;
+  return el('td', { class: row.date_is_guess ? 'muted' : null, title: row.date_is_guess ? 'The day of the video file; set the date with Edit' : null },
+            [fmtDate(row.date), time, where]);
+}
+
+function whoCell(row) {
+  const name = row.opponent
+    ? (row.opponent_id ? el('a', { href: withParams('team.html', { team: row.opponent_id }) }, row.opponent) : el('span', {}, row.opponent))
+    : el('span', { class: 'muted' }, row.stem ? 'no opponent yet · ' + row.stem : 'no opponent yet');
+  const extra = [];
+  if (row.kind === 'tournament') extra.push(el('span', { class: 'chip chip-grey chip-sm' }, 'Tournament'));
+  if (row.unscheduled) extra.push(el('span', { class: 'small muted' }, ' video on no scheduled game'));
+  return el('td', { class: 'strong' }, [name].concat(extra));
+}
+
+// What the video column says: the status chip for a linked video, "No video" otherwise.
+function videoCell(row) {
+  if (!row.stem) return el('td', { class: 'muted' }, 'No video');
+  const cell = el('td', { class: 'status-cell' });
+  cell.appendChild(el('span', { class: 'chip chip-' + row.chip, title: row.progress_words || row.stem }, row.status_words));
+  if (row.processed_on === 'colab' && row.status !== 'finished') cell.appendChild(el('span', { class: 'small muted' }, 'On Colab'));
+  return cell;
+}
+
+function scheduleActions(row) {
+  const parts = [];
+  if (row.stem && row.status === 'finished') parts.push(el('a', { href: withParams('game.html', { game: row.stem }) }, 'Open stats'));
+  else if (row.stem) parts.push(el('a', { href: 'games.html', class: 'muted' }, 'Process'));
+  parts.push(el('a', { href: '#', class: 'small', onclick: function (event) { event.preventDefault(); openFixturePanel(row); } }, 'Edit'));
+  return el('div', { class: 'actions' }, parts);
+}
+
+function scheduleRow(row) {
+  const today = todayText();
+  return el('tr', { id: row.stem ? 'row-' + row.stem : null, class: row.date === today ? 'today' : null }, [
+    whenCell(row),
+    whoCell(row),
+    el('td', { class: resultClass(row) }, fmtResult(row)),
+    videoCell(row),
+    el('td', {}, scheduleActions(row))]);
+}
+
 function showGames() {
   const body = byId('game-rows'), note = byId('games-note');
-  const rows = summary.games.filter(matches);
-  body.replaceChildren.apply(body, rows.map(gameRow));
+  const rows = summary.schedule.filter(matches);
+  body.replaceChildren.apply(body, rows.map(scheduleRow));
+  const withVideo = summary.schedule.filter(function (row) { return row.stem; }).length;
+  byId('schedule-count').textContent = plural(summary.schedule.length, 'game') + ' · ' + withVideo + ' with video';
   note.hidden = rows.length > 0;
   if (!rows.length) {
-    note.textContent = summary.games.length ? 'No game matches "' + searchText + '".'
+    note.textContent = summary.schedule.length ? 'No game matches "' + searchText + '".'
       : 'No games in this season yet. Press "Add a game" above.';
   }
+  // A row being processed refreshes itself (game_rows.js); the page reloads when the run ends.
+  summary.schedule.forEach(function (row) { if (row.running) watchRun(row); });
+}
+
+/* ---- "Add a game" / Edit: one game on the schedule ---- */
+
+let editing = null;       // the schedule row being edited, or null for a new one
+
+function setFixtureHome(value) {
+  byId('fixture-home').dataset.value = value === null ? '' : String(value);
+  for (const button of byId('fixture-home').querySelectorAll('button')) {
+    button.classList.toggle('on', value !== null && String(value) === button.dataset.home);
+  }
+}
+
+function fixtureHome() {
+  const value = byId('fixture-home').dataset.value;
+  return value === 'true' ? true : value === 'false' ? false : null;
+}
+
+// The video list: every video in the clips folder, the ones on no scheduled game first.
+async function fillVideoList(chosen) {
+  const all = await api('/api/games');
+  const linked = {};
+  summary.schedule.forEach(function (row) { if (row.stem && row.fixture_id) linked[row.stem] = row.opponent || row.fixture_id; });
+  const games = all.games.slice().sort(function (a, b) { return (linked[a.name] ? 1 : 0) - (linked[b.name] ? 1 : 0) || a.name.localeCompare(b.name); });
+  const select = byId('fixture-stem');
+  select.replaceChildren(el('option', { value: '' }, 'No video yet'));
+  games.forEach(function (row) {
+    const words = row.name + ' · ' + fmtLength(row.seconds) + (linked[row.name] && row.name !== chosen ? ' · linked to ' + linked[row.name] : '');
+    select.appendChild(el('option', { value: row.name }, words));
+  });
+  select.value = chosen || '';
+  const names = byId('team-names');
+  names.replaceChildren.apply(names, Object.keys(all.teams).map(function (id) { return el('option', { value: all.teams[id].name }); }));
+}
+
+async function openFixturePanel(row) {
+  editing = row || null;
+  const panel = byId('fixture-panel');
+  panel.hidden = false;
+  byId('fixture-title').textContent = row ? (row.fixture_id ? 'Edit this game' : 'Put this video on the schedule') : 'Add a game to the schedule';
+  byId('fixture-date').value = row && !row.date_is_guess ? (row.date || '') : '';
+  byId('fixture-time').value = row ? (row.time || '') : '';
+  byId('fixture-opponent').value = row ? (row.opponent || '') : '';
+  byId('fixture-kind').value = row ? (row.kind || '') : '';
+  byId('fixture-us').value = row && row.score_us !== null ? row.score_us : '';
+  byId('fixture-them').value = row && row.score_them !== null ? row.score_them : '';
+  byId('fixture-note').value = row ? (row.note || '') : '';
+  setFixtureHome(row ? row.home : null);
+  byId('fixture-delete').hidden = !(row && row.fixture_id);
+  await tryToast(function () { return fillVideoList(row ? row.stem : ''); });
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  byId(row && row.date ? 'fixture-opponent' : 'fixture-date').focus();
+}
+
+function closeFixturePanel() { byId('fixture-panel').hidden = true; editing = null; }
+
+async function saveFixture(event) {
+  event.preventDefault();
+  const button = byId('fixture-save');
+  button.disabled = true;
+  const body = {
+    date: byId('fixture-date').value, time: byId('fixture-time').value, opponent: byId('fixture-opponent').value.trim(),
+    home: fixtureHome(), kind: byId('fixture-kind').value, score_us: byId('fixture-us').value.trim(),
+    score_them: byId('fixture-them').value.trim(), note: byId('fixture-note').value.trim(), stem: byId('fixture-stem').value || null,
+  };
+  const saved = await tryToast(function () {
+    if (!body.date) throw new Error('A scheduled game needs a date.');
+    if (!body.opponent) throw new Error('Name the opponent.');
+    const base = '/api/seasons/' + encodeURIComponent(season.id) + '/schedule';
+    return editing && editing.fixture_id ? putJSON(base + '/' + encodeURIComponent(editing.fixture_id), body) : postJSON(base, body);
+  });
+  button.disabled = false;
+  if (!saved) return;
+  toast('Saved: ' + fmtDate(saved.date) + ' vs ' + body.opponent + (body.stem ? ' · video ' + body.stem : ''), 'good');
+  closeFixturePanel();
+  await loadSummary();
+}
+
+async function deleteFixture() {
+  if (!editing || !editing.fixture_id) return;
+  const words = fmtDate(editing.date) + (editing.opponent ? ' vs ' + editing.opponent : '');
+  if (!window.confirm('Take ' + words + ' off the schedule?' + (editing.stem ? ' The video stays in the season.' : ''))) return;
+  const done = await tryToast(function () {
+    return deleteJSON('/api/seasons/' + encodeURIComponent(season.id) + '/schedule/' + encodeURIComponent(editing.fixture_id));
+  });
+  if (!done) return;
+  closeFixturePanel();
+  await loadSummary();
 }
 
 /* ---- the leaders ---- */
@@ -227,8 +395,9 @@ async function loadSummary() {
 async function start() {
   season = await currentSeason();
   await showTitle();
+  await fillSeasonPicker();
   await loadSummary();
-  if (location.hash === '#add') openAddPanel();
+  if (location.hash === '#add') openFixturePanel(null);
 }
 
 // The shared rows and panel (game_rows.js): how this page reloads, and what happens after "Save the game".
@@ -244,7 +413,14 @@ GameRows.afterSave = function (where) {
   loadSummary().catch(function (problem) { toast(problem.message, 'bad'); });
 };
 wireAddPanel();
-byId('add-game').addEventListener('click', function () { openAddPanel(); });
+byId('add-fixture').addEventListener('click', function () { openFixturePanel(null); });
+byId('fixture-close').addEventListener('click', closeFixturePanel);
+byId('fixture-form').addEventListener('submit', saveFixture);
+byId('fixture-delete').addEventListener('click', deleteFixture);
+byId('fixture-home').addEventListener('click', function (event) {
+  const button = event.target.closest('button');
+  if (button) setFixtureHome(button.dataset.home === 'true');
+});
 byId('open-roster').addEventListener('click', openRosterPanel);
 byId('roster-close').addEventListener('click', function () { byId('roster-panel').hidden = true; });
 byId('roster-add').addEventListener('click', function () { byId('roster-rows').appendChild(rosterRow('', '')); });

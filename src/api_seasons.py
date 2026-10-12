@@ -5,7 +5,8 @@
     GET /api/seasons/games                the Games screen: every game grouped by season (current season first, then
                                           newest), newest game first, the Unassigned games last, each row as below
     GET /api/seasons/{id}/summary         the Season screen: library.season_summary() plus what each game row needs
-                                          (status words, the action to offer, progress while running, time estimate)
+                                          (status words, the action to offer, progress while running, time estimate),
+                                          the same on the "schedule" rows (a fixture without a video: "No video"),
                                           and the clips folder as Windows names it ("unassigned" is allowed)
     GET /api/seasons/{id}/game/{stem}     one game row again, polled while a run is going
     GET /api/seasons/{id}/players         the Players screen: season totals per player (roster players included),
@@ -169,6 +170,10 @@ def summary_or_400(season_id):
 def season_summary(season_id: str):
     summary = summary_or_400(season_id)
     summary["games"] = [with_status(row) for row in summary["games"]]
+    # The schedule's rows with a video get the same status words; a fixture without one says so itself.
+    summary["schedule"] = [with_status(row) if row.get("stem") else dict(row, status_words="No video", chip="grey", action=None,
+                                                                          progress_words="", estimate="")
+                           for row in summary["schedule"]]
     summary["clips_folder"] = main.windows_path(config.CLIPS_DIR)
     summary["busy"] = dash_common.what_is_running()
     summary["run_where"] = dash_common.load_settings()["run_where"]
