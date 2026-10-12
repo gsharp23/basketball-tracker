@@ -161,7 +161,7 @@ async function findOnMap() {
   try {
     const reply = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(words), { headers: { Accept: 'application/json' } });
     const rows = await reply.json();
-    if (!rows.length) { byId('about-found').textContent = 'Not found. Try the town and the state, like "Wilson, NC".'; return; }
+    if (!rows.length) { byId('about-found').textContent = 'Not found. Try the town and the state, like "Riverside, NC".'; return; }
     foundPlace = { lat: Number(rows[0].lat), lon: Number(rows[0].lon) };
     byId('about-found').textContent = 'Found: ' + rows[0].display_name.split(',').slice(0, 3).join(',') + '. Save to keep it.';
   } catch (problem) {

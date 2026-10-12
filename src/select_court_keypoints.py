@@ -430,7 +430,7 @@ def open_page(video, setup, landmarks):
         with gr.Row():
             measure_button = gr.Button("Measure the court from my clicks")
             use_button = gr.Button("Use the measured size")
-            gym_name = gr.Textbox(label="Gym name (to save this court for other videos)", placeholder="Southside Gym",
+            gym_name = gr.Textbox(label="Gym name (to save this court for other videos)", placeholder="Home gym",
                                   value=setup.get("gym") or "")
             gym_button = gr.Button("Save this court as a gym")
         with gr.Row():

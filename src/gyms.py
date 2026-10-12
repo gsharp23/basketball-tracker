@@ -1,7 +1,7 @@
 """The gym library: the courts the team plays on, measured once and used again.
 
     data/_library/gyms.json
-        {"gyms": {"<id>": {"name": "Southside Gym", "court": {"length_ft": 84.5, "width_ft": 41, "lane_ft": 10,
+        {"gyms": {"<id>": {"name": "Home gym", "court": {"length_ft": 84.5, "width_ft": 41, "lane_ft": 10,
                                                               "free_throw_ft": 19, "three_point_ft": 19.75, "preset": "custom"},
                            "team_id": null, "measured": "2026-10-12", "note": ""}}}
 The court dict is what court_setup.json's "court" holds, so a gym chosen on the first click page is
@@ -53,7 +53,7 @@ def save_gym(name, court, team_id=None, note=""):
     """Add a gym, or update the court of the gym with that name. Returns (id, gym)."""
     name = str(name or "").strip()[:60]
     if not name:
-        raise ValueError("Give the gym a name, like Southside Gym.")
+        raise ValueError("Give the gym a name, like Home gym or Riverside High.")
     data = load()
     key = find(name) or slug(name)
     base, n = key, 2
