@@ -21,6 +21,8 @@
   .side-cards .card-title { font-size: 16px; }
 
   .editor { position: relative; aspect-ratio: 16 / 9; background: #1b1b1f; border-radius: 10px; overflow: hidden; cursor: crosshair; user-select: none; touch-action: none; }
+  /* The browser must not start its own picture drag (it would cancel the box being drawn or moved). */
+  .editor img, .editor .box, .editor .handle { -webkit-user-drag: none; user-drag: none; }
   .editor.drawing { cursor: cell; }
   .editor img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
   .editor .boxes { position: absolute; inset: 0; }
@@ -73,7 +75,7 @@
     <div class="two-col stretch">
       <section class="editor-col">
         <div class="editor" id="editor">
-          <img id="picture" alt="" hidden>
+          <img id="picture" alt="" hidden draggable="false">
           <div class="boxes" id="boxes"></div>
           <div class="draft" id="draft" hidden></div>
           <canvas class="inset" id="inset" width="170" height="170" aria-hidden="true"></canvas>

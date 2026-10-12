@@ -478,6 +478,9 @@ function onKey(event) {
 
 function wire() {
   const editor = byId('editor');
+  // A drag over the picture would otherwise start the browser's own image drag, which cancels the pointer
+  // events half-way: no box gets drawn or moved. (draggable="false" on the img and the CSS do the same job.)
+  editor.addEventListener('dragstart', function (event) { event.preventDefault(); });
   editor.addEventListener('pointerdown', onPointerDown);
   editor.addEventListener('pointermove', onPointerMove);
   editor.addEventListener('pointerup', onPointerUp);
