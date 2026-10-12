@@ -120,13 +120,28 @@ def changed(source, target):
     return a.st_size != b.st_size or a.st_mtime > b.st_mtime + 1
 
 
+def copy_file(source, target):
+    """Copy one file, keeping its modification time when the target folder allows it.
+
+    Google Drive's folder on the laptop (a drvfs mount) refuses to set times and permissions, so a plain
+    shutil.copy2 would copy the file and then stop with "Operation not permitted". The file matters;
+    the time is kept where it can be.
+    """
+    shutil.copyfile(source, target)
+    try:
+        shutil.copystat(source, target)
+    except OSError:
+        pass
+
+
 def copy_tree(source, target, mirror=False, skip_videos=False):
     """Copy the files under source to target, only the new and changed ones.
 
     mirror=True also deletes files in target that are no longer under source (the
     pipeline removes its unfinished-work folders when a stage finishes; the outbox must not
     keep them, or the next session would "carry on" with work that is already done).
-    copy2 keeps the modification times, which main.py uses to tell what is up to date.
+    The copy keeps the modification times where the folder allows it (Google Drive's folder on the laptop
+    refuses to set them: there the copy is still made, and changed() falls back to the size).
     """
     source, target = Path(source), Path(target)
     if not source.is_dir():
@@ -137,7 +152,7 @@ def copy_tree(source, target, mirror=False, skip_videos=False):
             copy = target / path.relative_to(source)
             if changed(path, copy):
                 copy.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, copy)
+                copy_file(path, copy)
     if mirror and target.is_dir():
         for path in target.rglob("*"):
             if path.is_file() and wanted(path) and not (source / path.relative_to(target)).exists():
@@ -172,7 +187,7 @@ def local_video(drive, video):
     target = config.CLIPS_DIR / video.name
     if changed(video, target):
         drive.log(f"Copying {video.name} to the clips folder ({video.stat().st_size / 1e6:.0f} MB)...")
-        shutil.copy2(video, target)
+        copy_file(video, target)
     return f"clips/{video.name}"
 
 
@@ -190,7 +205,7 @@ def bring_in(drive, stem, video):
     court = drive.inbox / stem
     for name in COURT_FILES:
         if (court / name).exists() and changed(court / name, config.data_dir(local) / name):
-            shutil.copy2(court / name, config.data_dir(local) / name)
+            copy_file(court / name, config.data_dir(local) / name)
     copy_tree(court / COURT_VIEWS, config.data_dir(local) / COURT_VIEWS)
     return local, ""
 

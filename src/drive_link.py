@@ -235,7 +235,7 @@ def send_court_files(stem, video, inbox):
     target.mkdir(exist_ok=True)
     for name in colab_worker.COURT_FILES:
         if (source / name).exists() and colab_worker.changed(source / name, target / name):
-            shutil.copy2(source / name, target / name)
+            colab_worker.copy_file(source / name, target / name)
     colab_worker.copy_tree(source / colab_worker.COURT_VIEWS, target / colab_worker.COURT_VIEWS)
     return True
 
@@ -254,7 +254,10 @@ def copy_with_progress(source, target, job):
                 break
             writing.write(piece)
             job["done"] += len(piece)
-    shutil.copystat(source, part)       # the same modification time, so changed() sees the copy as up to date
+    try:
+        shutil.copystat(source, part)   # the same modification time, so changed() sees the copy as up to date
+    except OSError:
+        pass                            # Google Drive's folder refuses to set times; the copy is still good
     os.replace(part, target)
 
 
