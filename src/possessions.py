@@ -414,7 +414,7 @@ def report(video):
         "offense": shares([record for record in records if record["team"] == theirs], "offense", OFFENSE_TYPES),
         "press": {"pressed": pressed, "baskets": baskets},
         "not_labelled": len(records) - len(labelled),
-        "court": dict(zip(("length_ft", "width_ft"), shots.court_size(video))),
+        "court": shots.court_size(video).as_dict(),
         "marks": marks,
         "players": their_players(video, theirs, marks) if theirs else [],
         "shots_tagged": len(their_shots),

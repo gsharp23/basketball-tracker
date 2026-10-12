@@ -166,8 +166,19 @@ def now_text():
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def short_time(text):
-    """"2026-10-10 18:32:07" -> "18:32" today, "10 Oct 18:32" on another day; "" when there is no time."""
+def short_time(text, moment=None):
+    """"2026-10-10 18:32:07" -> "18:32" today, "10 Oct 18:32" on another day; "" when there is no time.
+
+    `moment` (seconds since 1970, as the worker writes beside its words) wins when given: the words are in
+    Colab's clock (UTC), the moment is shown in this laptop's."""
+    if moment:
+        try:
+            when = time.localtime(float(moment))
+        except (TypeError, ValueError, OverflowError):
+            when = None
+        if when:
+            same_day = time.strftime("%Y-%m-%d", when) == time.strftime("%Y-%m-%d")
+            return time.strftime("%H:%M" if same_day else "%d %b %H:%M", when)
     if not text:
         return ""
     try:
@@ -178,8 +189,13 @@ def short_time(text):
     return time.strftime("%H:%M" if same_day else "%d %b %H:%M", when)
 
 
-def minutes_since(text):
-    """How many minutes ago a status time was (None when it cannot be read)."""
+def minutes_since(text, moment=None):
+    """How many minutes ago a status time was (None when it cannot be read). `moment` (seconds since 1970) wins."""
+    if moment:
+        try:
+            return (time.time() - float(moment)) / 60
+        except (TypeError, ValueError):
+            pass
     try:
         return (time.time() - time.mktime(time.strptime(str(text), "%Y-%m-%d %H:%M:%S"))) / 60
     except (ValueError, TypeError, OverflowError):
@@ -369,7 +385,7 @@ def copying_status(job):
 def colab_status(saved, known, in_inbox):
     """The words for what Colab's status.json says about a game (and whether its results are here)."""
     state = str(saved.get("state") or "")
-    finished = short_time(saved.get("finished"))
+    finished = short_time(saved.get("finished"), saved.get("finished_at"))
     imported = known.get("imported_state") == state and known.get("imported_finished") == saved.get("finished")
     reply = {"state": state, "progress": None, "stale": False, "can_import": state in FINISHED_STATES and not imported,
              "imported": known.get("imported") if imported else None}
@@ -380,11 +396,11 @@ def colab_status(saved, known, in_inbox):
         stage_words = STAGE_WORDS.get(stage, stage) if stage else "starting"
         words = ["On Colab"] + ([f"{round(100 * how_far)}%"] if how_far is not None else []) + [stage_words]
         message = f"Colab is working on it: step {number} of {count}, {stage_words}." if stage else "Colab has started on it."
-        age = minutes_since(saved.get("updated"))
+        age = minutes_since(saved.get("updated"), saved.get("updated_at"))
         if age is not None and age > STALE_MINUTES:
             reply["stale"] = True
-            words.append(f"no word since {short_time(saved.get('updated'))}")
-            message = (f"Colab has not reported since {short_time(saved.get('updated'))}. The notebook may have stopped: "
+            words.append(f"no word since {short_time(saved.get('updated'), saved.get('updated_at'))}")
+            message = (f"Colab has not reported since {short_time(saved.get('updated'), saved.get('updated_at'))}. The notebook may have stopped: "
                        "open it and press Run all again; it carries on where it stopped.")
         reply.update(words=" · ".join(words), message=message,
                      progress={"how_far": how_far, "left": "", "line": str(saved.get("progress") or ""), "stage": stage,
@@ -526,8 +542,9 @@ def results_missing(video, saved):
 def import_results(stem):
     """Bring a game's results back from outbox/<stem>/ into data/, outputs/ and crops/.
 
-    Only when Colab's state is done or needs_court. A local file newer than Colab's copy is kept
-    and named in "kept" (the coach's shots, possessions and game info are never replaced). The
+    Only when Colab's state is done or needs_court. The result files (data/, outputs/) come first and the
+    game counts as back; the player pictures (crops/) follow in a background thread. A local file newer
+    than Colab's copy is kept and named in "kept" (the coach's shots, possessions and game info are never replaced). The
     game is marked processed_on "colab"; with the setting "drive_delete_after" on, the video is
     deleted from the inbox after a "done" import (never after needs_court: Colab still needs it).
     Returns {"state", "copied", "kept", "deleted_video", "missing", "message"}; while result files the status
@@ -553,10 +570,15 @@ def import_results(stem):
                       "Wait for it to finish.")
     outbox = paths(root)["outbox"] / stem
     copied, kept = 0, []
-    for name, target in (("data", config.data_dir(video)), ("outputs", config.output_dir(video)), ("crops", config.crops_dir(video))):
+    for name, target in (("data", config.data_dir(video)), ("outputs", config.output_dir(video))):
         count, left_alone = mirror_in(outbox / name, target)
         copied += count
         kept += [f"{name}/{path}" for path in left_alone]
+    # The player pictures (crops/: thousands of small files, which Google Drive hands over one at a time)
+    # come afterwards in the background: the game counts as back once its result files are here.
+    crops_thread = threading.Thread(target=lambda: mirror_in(outbox / "crops", config.crops_dir(video)),
+                                    daemon=True, name=f"drive-crops-{stem}")
+    crops_thread.start()
     library.save_game_info(stem, {"processed_on": "colab"})
     when = now_text()
     result = {"stem": stem, "when": when, "state": state, "copied": copied, "kept": kept, "deleted_video": False,

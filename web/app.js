@@ -255,7 +255,8 @@ function drawHalfCourt(court, courtSize, marks, colour) {
   court.replaceChildren();
   const ink = { fill: 'none', stroke: '#15171c', 'stroke-width': 2 };
   const line = function (tag, attrs) { shape(tag, Object.assign({}, ink, attrs)); };
-  const hoopY = 5.25, lane = 12, freeThrow = 19, three = 19.75;
+  // This court's markings (court_model.Court on the Python side); the usual ones when the game does not say.
+  const hoopY = 5.25, lane = courtSize.lane_ft || 12, freeThrow = courtSize.free_throw_ft || 19, three = courtSize.three_point_ft || 19.75;
   line('rect', { x: 10, y: 10, width: 480, height: bottom - 10 });
   line('rect', { x: x(width / 2 - lane / 2), y: 10, width: lane * scale, height: freeThrow * scale });
   line('circle', { cx: x(width / 2), cy: y(freeThrow), r: 6 * scale });

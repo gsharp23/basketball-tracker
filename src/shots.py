@@ -132,12 +132,12 @@ def save_game_info(video, changes):
 
 
 def court_size(video):
-    """(length, width) of this game's court in feet, as chosen when the court was marked."""
+    """This game's court as chosen when it was marked: a court_model.Court, (length, width) in feet that also
+    knows the lane and the lines of that gym."""
     setup = game_folder(video) / "court_setup.json"
     if setup.exists():
-        court = read_json(setup)["court"]
-        return court["length_ft"], court["width_ft"]
-    return config.COURT_LENGTH_FT, config.COURT_WIDTH_FT
+        return court_model.court_from(read_json(setup)["court"])
+    return court_model.Court(config.COURT_LENGTH_FT, config.COURT_WIDTH_FT)
 
 
 def load_teams(video):
@@ -381,12 +381,14 @@ def fold(x, y, end, length, width):
     return (x, y) if end == "left" else (length - x, width - y)
 
 
-def feet_outside_three(from_baseline, across, width):
-    """How far outside the three-point line a spot is, in feet (negative: inside the line)."""
+def feet_outside_three(from_baseline, across, width, three=None):
+    """How far outside the three-point line a spot is, in feet (negative: inside the line).
+    three: this court's three-point distance (the usual 19 ft 9 in when not given)."""
+    three = three or court_model.THREE_POINT_FT
     sideways = abs(across - width / 2)
     if from_baseline <= court_model.HOOP_FROM_BASELINE_FT:
-        return sideways - court_model.THREE_POINT_FT        # beside the hoop the line runs straight to the baseline
-    return math.hypot(from_baseline - court_model.HOOP_FROM_BASELINE_FT, sideways) - court_model.THREE_POINT_FT
+        return sideways - three                              # beside the hoop the line runs straight to the baseline
+    return math.hypot(from_baseline - court_model.HOOP_FROM_BASELINE_FT, sideways) - three
 
 
 def judge(shot, court):
@@ -404,10 +406,10 @@ def judge(shot, court):
     """
     if shot["x_ft"] is None:
         return None
-    length, width = court
+    length, width = court[0], court[1]
     end = "left" if shot["x_ft"] < length / 2 else "right"
     from_baseline, across = fold(shot["x_ft"], shot["y_ft"], end, length, width)
-    outside = feet_outside_three(from_baseline, across, width)
+    outside = feet_outside_three(from_baseline, across, width, getattr(court, "three", None))
     return {"end": end, "from_baseline": from_baseline, "across": across,
             "from_hoop_ft": math.hypot(from_baseline - court_model.HOOP_FROM_BASELINE_FT, across - width / 2),
             "outside_three_ft": outside, "worth": 3 if outside > 0 else 2}
@@ -580,20 +582,23 @@ def position_text(shot, court):
     return text
 
 
-def area_name(view, width):
+def area_name(view, court):
     """The spot a shot was taken from, in a coach's words: "paint", "left wing", "right corner"...
+    court: the game's court (a court_model.Court, or (length, width); a plain width still works).
 
     view is what judge() returned: the position as the shooter sees it, the hoop ahead.
     Left and right are the shooter's own. Ideas kept simple: the lane is the paint, the
     baseline strip either side of it is the baseline (a corner when outside the arc),
     the rest is elbow / top of the key inside the arc and wing / top of the key outside.
     """
+    court = court_model.court_from(court) if isinstance(court, (tuple, list, dict)) else court_model.Court(config.COURT_LENGTH_FT, court)
+    width = court[1]
     forward = view["from_baseline"] - court_model.HOOP_FROM_BASELINE_FT     # feet in front of the hoop
     sideways = view["across"] - width / 2                                  # feet to the shooter's right
     side = "left" if sideways < 0 else "right"
     if view["from_hoop_ft"] < 4:
         return "at the rim"
-    if abs(sideways) <= court_model.LANE_WIDTH_FT / 2 and view["from_baseline"] <= court_model.FREE_THROW_FT:
+    if abs(sideways) <= court.lane / 2 and view["from_baseline"] <= court.free_throw:
         return "paint"
     if forward < 5:
         return f"{side} corner" if view["outside_three_ft"] > 0 else f"{side} baseline"
@@ -610,7 +615,7 @@ def where_text(shot, court):
     view = judge(shot, court)
     if view is None:
         return "Position unknown"
-    return f"From {view['from_hoop_ft']:.0f} ft, {area_name(view, court[1])}"
+    return f"From {view['from_hoop_ft']:.0f} ft, {area_name(view, court)}"
 
 
 def list_line(shot, court):
@@ -619,7 +624,7 @@ def list_line(shot, court):
     if shot["kind"] == "free throw":
         return f"{result} free throw"
     view = judge(shot, court)
-    spot = area_name(view, court[1]) if view else "position unknown"
+    spot = area_name(view, court) if view else "position unknown"
     return f"{result} {shot['worth']} · {spot}"
 
 
@@ -752,7 +757,7 @@ def draw_heat_map(data, court, team, player=None, name="", path=None):
         shades = LinearSegmentedColormap.from_list("light_to_dark", ["#ffffff", "#bcd7f7", "#3987e5"])
         axes.imshow(smooth, extent=[0, width, half, 0], cmap=shades, vmin=0, interpolation="bilinear", zorder=1)
 
-    for line in court_model.court_lines(length, width):
+    for line in court_model.court_lines(length, width, **court_model.extra(court)):
         # only the left half of the court, turned so that its baseline is at the top
         across = np.where(line[:, 0] <= half + 0.01, line[:, 1], np.nan)
         axes.plot(across, line[:, 0], color=ink, linewidth=1.1, zorder=2)

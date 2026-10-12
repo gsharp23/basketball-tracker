@@ -29,7 +29,7 @@ What it writes
     outputs/<video>/court_check.jpg  8 frames with the court drawn on, to check by eye
 
 For the other stages
-    court_size(video)                    (length_ft, width_ft)
+    court_size(video)                    a court_model.Court: (length_ft, width_ft) with .lane, .free_throw, .three
     court_homography(video, frame)       3x3 matrix picture -> court feet, or None
     load_homographies(video)             the same for all sampled frames at once: {frame: matrix or None}
     to_court(H, points_px)               pixels -> feet
@@ -262,7 +262,7 @@ def mostly_on_one_line(points):
     return False
 
 
-def solve_court(setup, landmarks, length, width):
+def solve_court(setup, landmarks, length, width, lane=None, free_throw=None, three=None):
     """Turn the clicked landmarks into the court calibration.
 
     setup is the contents of court_setup.json, landmarks a list of
@@ -270,7 +270,7 @@ def solve_court(setup, landmarks, length, width):
     landmark, "rms_ft", "max_ft", "warnings": [plain sentences]}.
     Raises ValueError with a plain message when the clicks cannot give a court.
     """
-    model = court_model.landmarks(length, width)
+    model = court_model.landmarks(length, width, lane, free_throw, three)
     picture_width, picture_height = setup["width"], setup["height"]
     to_main = {view["frame"]: np.array(view["to_main"]) for view in setup["views"]}
     for mark in landmarks:
@@ -370,26 +370,27 @@ def load_calibration(video):
     path = config.data_dir(video) / "court_calibration.json"
     config.require_file(path, f"python src/select_court_keypoints.py --video {video}")
     saved = config.load_json(path)
-    length, width = court_size(video)
+    court = court_size(video)
+    length, width = court
     try:
-        fit = solve_court(setup, saved["landmarks"], length, width)
+        fit = solve_court(setup, saved["landmarks"], length, width, **court_model.extra(court))
     except ValueError as problem:
         sys.exit(f"The court landmarks in {path} cannot be used: {problem}\n"
                  f"Mark the court again:  python src/select_court_keypoints.py --video {video}")
     view_to_court = {view["frame"]: normalise(fit["main_to_court"] @ np.array(view["to_main"]),
                                               setup["width"], setup["height"])
                      for view in setup["views"]}
-    return {"court": (length, width), "view_to_court": view_to_court, "fit": fit,
+    return {"court": court, "view_to_court": view_to_court, "fit": fit,
             "provisional": bool(saved.get("provisional"))}
 
 
 def court_size(video):
-    """(length_ft, width_ft) the coach chose in select_court.py, else the defaults in config.py."""
+    """The court the coach chose in select_court.py: a court_model.Court, (length_ft, width_ft) that also knows
+    the lane and the lines; the defaults in config.py when there is no set-up yet."""
     path = config.data_dir(video) / "court_setup.json"
     if path.exists():
-        court = config.load_json(path)["court"]
-        return court["length_ft"], court["width_ft"]
-    return config.COURT_LENGTH_FT, config.COURT_WIDTH_FT
+        return court_model.court_from(config.load_json(path)["court"])
+    return court_model.Court(config.COURT_LENGTH_FT, config.COURT_WIDTH_FT)
 
 
 def setup_missing(video):
@@ -544,7 +545,7 @@ def check_tile(picture, H, players, court):
         return tile
     # The tile is smaller than the frame: first scale tile pixels up to frame pixels.
     grow = np.diag([width / TILE_SIZE[0], height / TILE_SIZE[1], 1.0])
-    court_model.draw_court(tile, H @ grow, court[0], court[1], thickness=1)
+    court_model.draw_court(tile, H @ grow, court[0], court[1], thickness=1, **court_model.extra(court))
     ids, points = foot_points(players, height)
     if points:
         for (x, y), (court_x, court_y) in zip(points, to_court(H, points)):
@@ -558,7 +559,7 @@ def check_tile(picture, H, players, court):
 def save_frames_file(video, court, records, complete, summary=None):
     """Write court_frames.json (the cache of one matrix per sampled frame)."""
     config.save_json(config.data_dir(video) / "court_frames.json",
-                     {"video": video, "court": {"length_ft": court[0], "width_ft": court[1]},
+                     {"video": video, "court": court_model.court_from(court).as_dict(),
                       "complete": complete, "frames": records, "summary": summary or {}})
     _homographies.pop(video, None)
 
@@ -593,8 +594,11 @@ def setup_changed(video, saved):
     made = (folder / "court_frames.json").stat().st_mtime
     newer = [name for name in ("court_setup.json", "court_calibration.json", "tracks.json")
              if (folder / name).stat().st_mtime > made]
-    length, width = court_size(video)
-    return bool(newer) or saved["court"] != {"length_ft": length, "width_ft": width}
+    # The court size or markings changed since: compared on the keys the saved file has (older files
+    # know only the length and the width).
+    wanted = court_size(video).as_dict()
+    changed = any(saved["court"].get(key) != value for key, value in wanted.items() if key in saved["court"])
+    return bool(newer) or changed
 
 
 def run(video=config.DEFAULT_VIDEO, resume=False):
@@ -810,7 +814,7 @@ def write_positions(video):
     folder = config.data_dir(video)
     tracks = config.load_json(folder / "tracks.json")
     homographies = load_homographies(video)
-    length, width = court_size(video)
+    court = court_size(video)
     frames = []
     for record in tracks["frames"]:
         H = homographies.get(record["frame"])
@@ -822,7 +826,7 @@ def write_positions(video):
             for track_id, (x, y) in zip(ids, to_court(H, points)):
                 players.append({"id": track_id, "x": round(float(x), 1), "y": round(float(y), 1)})
         frames.append({"frame": record["frame"], "players": players})
-    positions = {"court": {"length_ft": length, "width_ft": width}, "frames": frames}
+    positions = {"court": court.as_dict(), "frames": frames}
     config.save_json(folder / "positions.json", positions)
     return positions
 

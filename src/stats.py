@@ -180,15 +180,17 @@ def player_path(ids, boxes, spots):
     return path, two_places
 
 
-def in_paint(x, y, length, width):
-    """True inside either lane: the 12 ft wide box from the baseline to the free-throw line."""
+def in_paint(x, y, court):
+    """True inside either lane: the box from the baseline to the free-throw line (12 ft wide on most courts)."""
+    length, width = court
     from_baseline = min(x, length - x)
-    return (0 <= from_baseline <= court_model.FREE_THROW_FT
-            and abs(y - width / 2) <= court_model.LANE_WIDTH_FT / 2)
+    return 0 <= from_baseline <= court.free_throw and abs(y - width / 2) <= court.lane / 2
 
 
-def measure(path, stride, look_seconds, length, width):
+def measure(path, stride, look_seconds, court):
     """Distance, speed and where-on-the-court numbers for one path {frame: (x, y)}."""
+    length, width = court
+
     distance, steps, jumps = 0.0, 0, 0
     for frame, spot in path.items():
         before = path.get(frame - stride)
@@ -213,7 +215,7 @@ def measure(path, stride, look_seconds, length, width):
         ys = [y for _, y in path.values()]
         left = sum(x < length / 3 for x in xs)
         right = sum(x > 2 * length / 3 for x in xs)
-        paint = sum(in_paint(x, y, length, width) for x, y in path.values())
+        paint = sum(in_paint(x, y, court) for x, y in path.values())
         result.update({"avg_x_ft": round(sum(xs) / len(xs), 1), "avg_y_ft": round(sum(ys) / len(ys), 1),
                        "left_third_pct": round(100 * left / len(path)),
                        "middle_third_pct": round(100 * (len(path) - left - right) / len(path)),
@@ -258,7 +260,8 @@ def build_stats(video, tracks, teams, jerseys, positions, roster):
     """Work everything out. Returns (what goes into stats.json, {team number: all its positions})."""
     stride = tracks["stride"]
     look_seconds = stride / tracks["fps"]       # each look at the video stands for this much time
-    length, width = positions["court"]["length_ft"], positions["court"]["width_ft"]
+    court = court_model.court_from(positions["court"])        # (length, width) that knows its markings
+    length, width = court
     labels = {int(key): team["label"] for key, team in teams["teams"].items()}
 
     boxes = {}          # tracking ID -> the frames it has a box in
@@ -284,7 +287,7 @@ def build_stats(video, tracks, teams, jerseys, positions, roster):
         row = {"team": labels.get(group["team"]), "team_index": group["team"], "number": group["number"],
                "name": name, "identified": identified(group), "tracking_ids": group["ids"],
                "seen_s": round(len(seen) * look_seconds, 1)}
-        row.update(measure(path, stride, look_seconds, length, width))
+        row.update(measure(path, stride, look_seconds, court))
         row["two_places_frames"] = two_places
         rows.append(row)
 
@@ -378,7 +381,7 @@ def save_position_map(path, label, team_spots, court, look_seconds):
     figure.patch.set_facecolor("white")
     # origin="lower" puts the near (camera) sideline at the bottom, like the tactical video.
     image = axes.imshow(seconds, origin="lower", extent=[0, length, 0, width], cmap=blues, vmin=0)
-    for line in court_model.court_lines(length, width):
+    for line in court_model.court_lines(length, width, **court_model.extra(court)):
         axes.plot(line[:, 0], line[:, 1], color=ink, linewidth=1.0)
     axes.set_xlim(-2, length + 2)
     axes.set_ylim(-2, width + 2)
@@ -502,7 +505,7 @@ def run(video=config.DEFAULT_VIDEO, position_maps=True, show_table=True):
     print(f"Wrote {folder / 'stats.json'}")
     print(f"Wrote {folder / 'stats.csv'}   (opens in Excel)")
     if position_maps:
-        court = (positions["court"]["length_ft"], positions["court"]["width_ft"])
+        court = court_model.court_from(positions["court"])
         for team in result["teams"]:
             if team_spots[team["team_index"]]:
                 path = config.output_dir(video) / f"position_map_{team['team'].replace(' ', '_')}.png"

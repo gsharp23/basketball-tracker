@@ -43,6 +43,7 @@ import click_tools
 import config
 import court_mapper
 import court_model
+import gyms
 
 MOMENTS = 120               # look at about this many moments of a long video
 SEQUENTIAL_UP_TO = 3000     # videos up to this many frames are read from the start; longer ones by jumping
@@ -270,6 +271,15 @@ def open_page(video, frames, court, info):
         length, width = court_model.PRESETS[name]
         return length, width
 
+    gym_list = gyms.load()["gyms"]
+    gym_choices = [("(none)", "")] + [(f"{row['name']}: {gyms.court_words(row['court'])}", key) for key, row in gym_list.items()]
+
+    def choose_gym(key):
+        if not key or key not in gym_list:
+            return gr.update(), gr.update()
+        row = gym_list[key]["court"]
+        return row["length_ft"], row["width_ft"]
+
     def add_picture(text, ticked):
         try:
             frame = time_to_frame(text, info["fps"])
@@ -283,12 +293,16 @@ def open_page(video, frames, court, info):
         return (gallery_items(), gr.update(choices=choices, value=ticked + [label(frame)]),
                 f"### Added the picture at {label(frame)}.")
 
-    def save_and_close(length, width, ticked):
+    def save_and_close(length, width, ticked, gym_key):
         try:
             check_court_size(length, width)
         except (ValueError, TypeError) as problem:
             return f"### Not saved. {problem}"
         answers["court"] = {"length_ft": length, "width_ft": width}
+        gym = gym_list.get(gym_key) if gym_key else None
+        if gym and (gym["court"]["length_ft"], gym["court"]["width_ft"]) == (length, width):
+            answers["court"] = dict(gym["court"])            # the gym's markings too (lane, lines)
+            answers["gym"] = gym["name"]
         answers["drop"] = [frame for frame in frames if label(frame) not in ticked]
         if len(answers["drop"]) == len(frames):
             return "### Not saved. At least one picture must stay ticked."
@@ -311,6 +325,7 @@ def open_page(video, frames, court, info):
                               label="Court size")
             length = gr.Number(court["length_ft"], label="Court length in feet (type your own if different)")
             width = gr.Number(court["width_ft"], label="Court width in feet")
+        gym_box = gr.Dropdown(gym_choices, value="", label="Or a gym you have measured before (fills the size and its markings)")
         gallery = gr.Gallery(gallery_items(), columns=4, label="Reference pictures (time in the video)",
                              height="auto", format="jpeg")
         ticked = gr.CheckboxGroup([label(frame) for frame in frames], value=[label(frame) for frame in frames],
@@ -322,8 +337,9 @@ def open_page(video, frames, court, info):
         save_button = gr.Button("Save and close", variant="primary", size="lg")
 
         preset.input(choose_preset, preset, [length, width])
+        gym_box.input(choose_gym, gym_box, [length, width])
         add_button.click(add_picture, [add_time, ticked], [gallery, ticked, message])
-        save_button.click(save_and_close, [length, width, ticked], message)
+        save_button.click(save_and_close, [length, width, ticked, gym_box], message)
 
     click_tools.run_page(demo, done, temp_dir)
     return answers
@@ -403,6 +419,9 @@ def run(video=config.DEFAULT_VIDEO, answers=None, rescan=False, add_time=None, u
         except ValueError as problem:
             sys.exit(str(problem))
         court = court_choice(answers["court"]["length_ft"], answers["court"]["width_ft"])
+        for key in ("lane_ft", "free_throw_ft", "three_point_ft"):          # a gym's markings come along
+            if answers["court"].get(key):
+                court[key] = answers["court"][key]
     dropped = [{"frame": frame, "reason": "unticked by the coach"} for frame in answers.get("drop", [])
                if frame in frames]
     frames = [frame for frame in frames if frame not in answers.get("drop", [])]
@@ -410,6 +429,8 @@ def run(video=config.DEFAULT_VIDEO, answers=None, rescan=False, add_time=None, u
         sys.exit("Every reference picture was dropped. Nothing was saved.")
 
     setup = build_setup(video, frames, court, info, dropped)
+    if answers.get("gym"):
+        setup["gym"] = answers["gym"]
     config.save_json(setup_file, setup, indent=1)
     court_mapper.forget(video)
     # Tidy up: pictures in court_views/ that are no longer views.
@@ -421,7 +442,7 @@ def run(video=config.DEFAULT_VIDEO, answers=None, rescan=False, add_time=None, u
 
     print()
     print(f"Court set-up for {video}")
-    print(f"  court size: {court['length_ft']} x {court['width_ft']} ft ({court['preset'].replace('_', ' ')})")
+    print(f"  court size: {gyms.court_words(court)} ({court['preset'].replace('_', ' ')})")
     print(f"  reference pictures: {len(setup['views'])}, at " + ", ".join(view["time"] for view in setup["views"]))
     print(f"  main picture: {time_label(setup['main_view'], info['fps'])} (frame {setup['main_view']})")
     if setup["links"]:

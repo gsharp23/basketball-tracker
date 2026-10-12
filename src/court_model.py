@@ -28,15 +28,52 @@ HOOP_FROM_BASELINE_FT = 5.25    # middle of the hoop, measured from the baseline
 # Court length and width in feet.
 PRESETS = {"high_school": (84, 50), "college_nba": (94, 50), "junior_high": (74, 42)}
 
+
+class Court(tuple):
+    """(length_ft, width_ft) that also knows this court's markings: .lane, .free_throw, .three (feet).
+
+    Gyms differ: a church gym can have a 10 ft lane or a shorter three-point line. A plain
+    (length, width) pair, or a court dict without the extra keys, gets the usual markings above.
+    """
+    def __new__(cls, length, width, lane=None, free_throw=None, three=None):
+        court = super().__new__(cls, (length, width))
+        court.lane = float(lane) if lane else float(LANE_WIDTH_FT)
+        court.free_throw = float(free_throw) if free_throw else float(FREE_THROW_FT)
+        court.three = float(three) if three else float(THREE_POINT_FT)
+        return court
+
+    def as_dict(self):
+        return {"length_ft": self[0], "width_ft": self[1], "lane_ft": self.lane, "free_throw_ft": self.free_throw,
+                "three_point_ft": self.three}
+
+
+def court_from(court):
+    """A Court from a court dict ({"length_ft", "width_ft", "lane_ft"?, ...}), a (length, width) pair or a Court."""
+    if isinstance(court, Court):
+        return court
+    if isinstance(court, dict):
+        return Court(court["length_ft"], court["width_ft"], court.get("lane_ft"), court.get("free_throw_ft"),
+                     court.get("three_point_ft"))
+    return Court(court[0], court[1])
+
+
+def extra(court):
+    """The markings of a court as keyword arguments for landmarks(), court_lines() and draw_court()."""
+    court = court_from(court)
+    return {"lane": court.lane, "free_throw": court.free_throw, "three": court.three}
+
 # draw_court leaves out anything that would land further than this from the picture.
 FAR_AWAY_PX = 6000
 
 
-def landmarks(length, width):
+def landmarks(length, width, lane=None, free_throw=None, three=None):
     """The 20 points the coach can click: name -> {"label": plain English, "court_ft": [x, y]}.
 
     "far" means the side of the court away from the camera, "near" means the camera side.
+    lane, free_throw and three are this court's markings in feet (the usual ones when not given).
     """
+    court = Court(length, width, lane, free_throw, three)
+    LANE_WIDTH_FT, FREE_THROW_FT, THREE_POINT_FT = court.lane, court.free_throw, court.three
     middle = width / 2
     half_lane = LANE_WIDTH_FT / 2
     marks = {}
@@ -90,8 +127,10 @@ def arc(centre_x, centre_y, radius, start_degrees, end_degrees):
     return np.column_stack([centre_x + radius * np.cos(angles), centre_y + radius * np.sin(angles)])
 
 
-def court_lines(length, width):
+def court_lines(length, width, lane=None, free_throw=None, three=None):
     """The painted basketball lines: a list of N x 2 arrays in feet, a point about every 1 ft."""
+    court = Court(length, width, lane, free_throw, three)
+    LANE_WIDTH_FT, FREE_THROW_FT, THREE_POINT_FT = court.lane, court.free_throw, court.three
     middle = width / 2
     half_lane = LANE_WIDTH_FT / 2
     lines = [
@@ -123,7 +162,8 @@ def on_court(x, y, length, width, margin_ft=3.0):
     return -margin_ft <= x <= length + margin_ft and -margin_ft <= y <= width + margin_ft
 
 
-def draw_court(picture, H_image_to_court, length, width, colour=(0, 255, 0), thickness=2):
+def draw_court(picture, H_image_to_court, length, width, colour=(0, 255, 0), thickness=2,
+               lane=None, free_throw=None, three=None):
     """Draw the court lines onto a video frame and return it.
 
     H_image_to_court is the 3x3 matrix that turns a pixel into court feet. To draw we
@@ -135,7 +175,7 @@ def draw_court(picture, H_image_to_court, length, width, colour=(0, 255, 0), thi
     # A pixel low in the picture is certainly floor in front of the camera, so it
     # tells us which sign is the right one.
     right_sign = np.sign((H_image_to_court @ [width_px / 2, 0.9 * height_px, 1.0])[2])
-    for line in court_lines(length, width):
+    for line in court_lines(length, width, lane, free_throw, three):
         projected = np.column_stack([line, np.ones(len(line))]) @ court_to_image.T
         in_front = projected[:, 2] * right_sign > 1e-9
         pixels = projected[:, :2] / np.where(in_front, projected[:, 2], 1.0)[:, None]

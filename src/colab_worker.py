@@ -66,6 +66,8 @@ def parse_args():
                         help="the Drive folder with models/, inbox/ and outbox/ (default: %(default)s)")
     parser.add_argument("--once", action="store_true", help="process what is there now and exit, instead of polling")
     parser.add_argument("--poll-seconds", type=int, default=60, help="how often to look in the inbox (default 60)")
+    parser.add_argument("--idle-minutes", type=int, default=15,
+                        help="stop by itself after this long with nothing to do (default 15; 0 = keep waiting)")
     parser.add_argument("--no-videos", action="store_true",
                         help="leave the videos (tracked.mp4, tactical.mp4) out of the outbox; they are big")
     return parser.parse_args()
@@ -175,6 +177,13 @@ def write_status(drive, stem, status):
     folder = drive.outbox / stem
     folder.mkdir(parents=True, exist_ok=True)
     status["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    # The words above are in this machine's clock (UTC on Colab); the numbers below are the moment itself,
+    # so the laptop can show the times in its own clock.
+    status["updated_at"] = time.time()
+    if status.get("started") and not status.get("started_at"):
+        status["started_at"] = time.time()
+    if status.get("finished") and not status.get("finished_at"):
+        status["finished_at"] = time.time()
     temp = folder / "status.json.tmp"
     temp.write_text(json.dumps(status, indent=2), encoding="utf-8")
     os.replace(temp, folder / "status.json")
@@ -341,12 +350,13 @@ def games_to_do(drive, attempted):
     return todo
 
 
-def run(drive_root, once=False, poll_seconds=60, no_videos=False):
+def run(drive_root, once=False, poll_seconds=60, no_videos=False, idle_minutes=15):
     drive = Drive(drive_root)
     drive.make_folders()
     # (Which device the models run on is printed by main.py when the detection starts.)
     drive.log(f"Worker started. Drive folder: {drive.root}")
     attempted = {}      # stem -> the state it ended in, in this run of the program
+    idle_since = None   # when the inbox last had nothing to do
     while True:
         todo = games_to_do(drive, attempted)
         for video in todo:
@@ -354,15 +364,24 @@ def run(drive_root, once=False, poll_seconds=60, no_videos=False):
         if once:
             drive.log(f"{len(todo)} game(s) processed; stopping (--once).")
             return
-        if not todo:
-            print(f"Nothing to do. Looking again in {poll_seconds} seconds (stop with Ctrl+C or the stop button).",
-                  flush=True)
+        if todo:
+            idle_since = None
+        else:
+            idle_since = idle_since or time.time()
+            waited = (time.time() - idle_since) / 60
+            if idle_minutes and waited >= idle_minutes:
+                # Stopping by itself: a Colab session that waits all night costs compute units for nothing.
+                drive.log(f"Nothing to do for {idle_minutes} minutes; stopping. Run the notebook again when a game is in the inbox.")
+                return
+            left = f"{max(1, round(idle_minutes - waited))} min" if idle_minutes else "never"
+            print(f"Nothing to do. Looking again in {poll_seconds} seconds (stops by itself in {left}; "
+                  "Ctrl+C or the stop button stops it now).", flush=True)
         time.sleep(poll_seconds)
 
 
 if __name__ == "__main__":
     args = parse_args()
     try:
-        run(args.drive_root, args.once, args.poll_seconds, args.no_videos)
+        run(args.drive_root, args.once, args.poll_seconds, args.no_videos, args.idle_minutes)
     except KeyboardInterrupt:
         print("\nWorker stopped. Start it again and it carries on with whatever was not finished.")

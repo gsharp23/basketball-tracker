@@ -254,6 +254,7 @@ print what a screen gets).
 | `data/_library/teams.json` | The opponents: name, a short code, a colour, the coach's notes per jersey number ("Goes left"), where they are (a place and, once looked up, its map position), links to their pages, what the coach typed or pasted about them (record, points for and against, coach, level, the source and the day) and their roster by number. Also "home": where our own gym is, for the map. Our own team is not a row |
 | `data/<video>/game_info.json` | What the coach said about one game: its season, the opponent, the date, home or away, which detected colour group is us, the final score, where it was processed (laptop or Colab), the gym's conditions |
 | `data/<video>/shots.json`, `possessions.json` | The shots tagged and the possessions labelled by hand (see "Shots and the scoring heat map") |
+| `data/_library/gyms.json` | The gym library: the courts the team plays on, each with its size and markings (length, width, lane width, free-throw and three-point distances), measured from the coach's clicks on the landmark page or typed; the first click page offers them for the next video |
 | `data/_dashboard/play_types.json` | The offense and defense play types a possession can be labelled with; edited on Settings or in place on the Plays screen |
 | `data/_dashboard/settings.json` | The settings, among them the Drive folder path and the detector model in use |
 | `data/_dashboard/drive.json` | What this laptop remembers about the games sent to Colab |
@@ -427,16 +428,23 @@ source ~/venvs/hoops-tracker/bin/activate
 
 1. `python src/select_court.py --video clips/game1.mp4`
    Choose the court size (high school 84 x 50 ft is the default; type your own
-   numbers for another court). Untick any reference picture that is blurred or
-   does not show the court. Press "Save and close".
+   numbers for another court, or pick a gym measured before from the gym
+   list). Untick any reference picture that is blurred or does not show the
+   court. Press "Save and close".
 2. `python src/select_court_keypoints.py --video clips/game1.mp4`
    Pick a picture, choose a landmark from the list, click it in the picture,
    then click it again exactly in the enlarged picture. Use the basketball
    lines, not the lines of other sports. Do at least 4 landmarks at each end
    of the court the video shows, 10 to 14 in total, and include the two
    points where the half-court line crosses the centre circle. After 4 landmarks a green
-   court is drawn: it should sit on the real lines in every picture. Press
-   "Save and close".
+   court is drawn: it should sit on the real lines in every picture. **If every
+   click is a foot or two off in the same way, the gym is not the size you
+   chose**: press "Measure the court from my clicks" (it needs 4+ landmarks at
+   each end and a centre point) and the tool tries the sizes and markings a
+   court can have (length, width, lane width, free-throw and three-point
+   distances) and says which fits the clicks best and by how much; "Use the
+   measured size" keeps it, and "Save this court as a gym" puts it in the gym
+   library for the next video from that gym. Press "Save and close".
 3. `python src/select_hoops.py --video clips/game1.mp4` (optional for now;
    it is for shot detection later.) For each hoop, click the two ends of the rim.
 4. Run `python src/main.py --video clips/game1.mp4` (again; if it is still
@@ -546,6 +554,11 @@ Drive folder has everything that was printed.
   itself after about 12 hours. Nothing is lost: the results so far are copied
   to the outbox every minute, and the next Run all carries on where it
   stopped (finished stages are skipped, a half-done one continues).
+- The worker stops by itself after 15 minutes with nothing in the inbox
+  (`--idle-minutes`, 0 keeps it waiting), and the notebook then lets go of the
+  machine, so a session never burns compute units all night. The times it
+  writes are in Colab's clock (UTC); it writes the moment itself beside them,
+  and the dashboard shows that in the laptop's clock.
 - While the video and the results are in Google Drive they sit in the coach's
   own Google account, under Google's terms. Sending a video there is the
   coach's own button press each time.

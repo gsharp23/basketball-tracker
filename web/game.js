@@ -456,14 +456,15 @@ function drawFullCourt(court) {
   line('rect', { x: px(0), y: py(width), width: length * courtScale, height: width * courtScale });
   line('line', { x1: px(length / 2), y1: py(0), x2: px(length / 2), y2: py(width) });
   line('circle', { cx: px(length / 2), cy: py(width / 2), r: 6 * courtScale });
+  const laneFt = court.lane_ft || 12, ftFt = court.free_throw_ft || 19, threeFt = court.three_point_ft || 19.75;   // this gym's markings
   [[0, 1], [length, -1]].forEach(function (end) {
     const baseline = end[0], dir = end[1];
-    const freeThrow = baseline + dir * 19, hoop = baseline + dir * 5.25, middle = width / 2;
-    line('rect', { x: px(Math.min(baseline, freeThrow)), y: py(middle + 6), width: 19 * courtScale, height: 12 * courtScale });
+    const freeThrow = baseline + dir * ftFt, hoop = baseline + dir * 5.25, middle = width / 2;
+    line('rect', { x: px(Math.min(baseline, freeThrow)), y: py(middle + laneFt / 2), width: ftFt * courtScale, height: laneFt * courtScale });
     line('circle', { cx: px(freeThrow), cy: py(middle), r: 6 * courtScale });
-    const r = 19.75 * courtScale, sweep = dir > 0 ? 1 : 0;
-    line('path', { d: 'M' + px(baseline) + ' ' + py(middle + 19.75) + ' L' + px(hoop) + ' ' + py(middle + 19.75) +
-                      ' A ' + r + ' ' + r + ' 0 0 ' + sweep + ' ' + px(hoop) + ' ' + py(middle - 19.75) + ' L' + px(baseline) + ' ' + py(middle - 19.75) });
+    const r = threeFt * courtScale, sweep = dir > 0 ? 1 : 0;
+    line('path', { d: 'M' + px(baseline) + ' ' + py(middle + threeFt) + ' L' + px(hoop) + ' ' + py(middle + threeFt) +
+                      ' A ' + r + ' ' + r + ' 0 0 ' + sweep + ' ' + px(hoop) + ' ' + py(middle - threeFt) + ' L' + px(baseline) + ' ' + py(middle - threeFt) });
     line('circle', { cx: px(hoop), cy: py(middle), r: 0.75 * courtScale + 1.5, stroke: '#c2410c' });
   });
   shape(svg, 'polyline', { id: 'trail', points: '', fill: 'none', stroke: SELECTED_DOT, 'stroke-width': 3, opacity: 0.7 });

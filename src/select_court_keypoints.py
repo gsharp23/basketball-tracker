@@ -39,8 +39,10 @@ import numpy as np
 
 import click_tools
 import config
+import court_fit
 import court_mapper
 import court_model
+import gyms
 
 DIAGRAM_PX_PER_FT = 10
 DIAGRAM_MARGIN = 50
@@ -75,15 +77,20 @@ def try_solve(setup, landmarks):
     """(fit, None) when the clicks give a court, else (None, the plain reason why not)."""
     court = setup["court"]
     try:
-        return court_mapper.solve_court(setup, landmarks, court["length_ft"], court["width_ft"]), None
+        return court_mapper.solve_court(setup, landmarks, court["length_ft"], court["width_ft"], **court_model.extra(court)), None
     except ValueError as problem:
         return None, str(problem)
 
 
+def model_of(setup):
+    """The 20 landmarks at this court's size and markings."""
+    court = setup["court"]
+    return court_model.landmarks(court["length_ft"], court["width_ft"], **court_model.extra(court))
+
+
 def numbers(setup):
     """{landmark name: its number in the list and on the diagram}."""
-    model = court_model.landmarks(setup["court"]["length_ft"], setup["court"]["width_ft"])
-    return {name: i + 1 for i, name in enumerate(model)}
+    return {name: i + 1 for i, name in enumerate(model_of(setup))}
 
 
 # ---------------------------------------------------------------- drawing
@@ -94,7 +101,8 @@ def draw_view(picture, view, landmarks, fit, setup):
     court = setup["court"]
     if fit is not None:
         to_main = next(np.array(v["to_main"]) for v in setup["views"] if v["frame"] == view)
-        court_model.draw_court(shown, fit["main_to_court"] @ to_main, court["length_ft"], court["width_ft"])
+        court_model.draw_court(shown, fit["main_to_court"] @ to_main, court["length_ft"], court["width_ft"],
+                               **court_model.extra(court))
     number = numbers(setup)
     for i, mark in enumerate(landmarks):
         if mark["view"] != view:
@@ -121,12 +129,13 @@ def draw_diagram(setup, landmarks):
         return int(round(margin + x * scale)), int(round(margin + (width - y) * scale))
 
     diagram = np.full((int(width * scale) + 2 * margin, int(length * scale) + 2 * margin, 3), 255, np.uint8)
-    for line in court_model.court_lines(length, width):
+    for line in court_model.court_lines(length, width, **court_model.extra(court)):
         points = np.array([spot(x, y) for x, y in line], np.int32)
         cv2.polylines(diagram, [points], False, (0, 0, 0), 2, cv2.LINE_AA)
     clicked = {mark["name"] for mark in landmarks}
+    model = model_of(setup)
     for name, i in numbers(setup).items():
-        x, y = court_model.landmarks(length, width)[name]["court_ft"]
+        x, y = model[name]["court_ft"]
         centre = spot(x, y)
         cv2.circle(diagram, centre, 16, (0, 170, 0) if name in clicked else (0, 0, 255), -1, cv2.LINE_AA)
         text_size = cv2.getTextSize(str(i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
@@ -140,8 +149,7 @@ def draw_diagram(setup, landmarks):
 
 def table_rows(setup, landmarks, fit):
     """One row per click: (landmark label, time of the picture, error in feet or None)."""
-    court = setup["court"]
-    model = court_model.landmarks(court["length_ft"], court["width_ft"])
+    model = model_of(setup)
     number = numbers(setup)
     times = {view["frame"]: view["time"] for view in setup["views"]}
     rows = []
@@ -156,8 +164,8 @@ def table_rows(setup, landmarks, fit):
 def save(video, setup, landmarks, provisional=False):
     """Solve, then write court_calibration.json and the check picture. Raises ValueError if it cannot be solved."""
     court = setup["court"]
-    fit = court_mapper.solve_court(setup, landmarks, court["length_ft"], court["width_ft"])
-    model = court_model.landmarks(court["length_ft"], court["width_ft"])
+    fit = court_mapper.solve_court(setup, landmarks, court["length_ft"], court["width_ft"], **court_model.extra(court))
+    model = model_of(setup)
     calibration = {
         "court": court,
         "landmarks": [{"name": mark["name"], "view": mark["view"], "px": mark["px"],
@@ -174,7 +182,7 @@ def save(video, setup, landmarks, provisional=False):
     check = save_check_picture(video, setup, landmarks, fit)
 
     print()
-    print(f"Court landmarks for {video}  ({court['length_ft']} x {court['width_ft']} ft court)")
+    print(f"Court landmarks for {video}  ({gyms.court_words(court)} court)")
     if provisional:
         print("  PROVISIONAL: these clicks were not made by the coach. Redo them on the page.")
     for label, when, error in table_rows(setup, landmarks, fit):
@@ -298,6 +306,47 @@ def remove(session, name):
     return refresh(session, "That landmark is not marked on this picture.")
 
 
+def measure_session(session):
+    """ "Measure the court from my clicks": try the sizes and markings, say what fits best; nothing is changed yet."""
+    session["zoom"] = None
+    try:
+        found = court_fit.measure(session["setup"], session["landmarks"])
+    except ValueError as problem:
+        session["measured"] = None
+        return refresh(session, f"Cannot measure yet. {problem}")
+    session["measured"] = found["court"]
+    words = found["words"] + " Press \"Use the measured size\" to keep it."
+    words += "".join(f" WARNING: {warning}" for warning in found["warnings"])
+    return refresh(session, words)
+
+
+def use_measured(session):
+    """ "Use the measured size": the measured court goes into court_setup.json and the clicks are refitted to it."""
+    session["zoom"] = None
+    measured = session.get("measured")
+    if not measured:
+        return refresh(session, "Press \"Measure the court from my clicks\" first.")
+    setup = session["setup"]
+    setup["court"] = dict(measured)
+    config.save_json(config.data_dir(session["video"]) / "court_setup.json", setup, indent=1)
+    court_mapper.forget(session["video"])
+    session["measured"] = None
+    return refresh(session, f"The court is now {gyms.court_words(setup['court'])}. Press \"Save and close\" to keep the clicks with it.")
+
+
+def save_gym_session(session, name):
+    """ "Save this court as a gym": the court size and markings go into the gym library under that name."""
+    session["zoom"] = None
+    try:
+        key, gym = gyms.save_gym(name, session["setup"]["court"])
+    except ValueError as problem:
+        return refresh(session, str(problem))
+    session["setup"]["gym"] = gym["name"]
+    config.save_json(config.data_dir(session["video"]) / "court_setup.json", session["setup"], indent=1)
+    return refresh(session, f"Saved the gym \"{gym['name']}\" ({gyms.court_words(gym['court'])}). The first click page "
+                            "offers it for the next video from there.")
+
+
 def save_session(session):
     """ "Save and close" was pressed. Saving is refused, with the reason, if there is no court yet."""
     session["zoom"] = None
@@ -317,8 +366,7 @@ def open_page(video, setup, landmarks):
     gr = click_tools.load_gradio(temp_dir)
     done = threading.Event()
     session = new_session(video, setup, landmarks)
-    court = setup["court"]
-    model = court_model.landmarks(court["length_ft"], court["width_ft"])
+    model = model_of(setup)
     view_choices = [(f"Picture at {view['time']} (frame {view['frame']})", view["frame"]) for view in setup["views"]]
     landmark_choices = [(f"{i}. {model[name]['label']}", name) for name, i in numbers(setup).items()]
     first = refresh(session, "Choose a landmark in the list, then click it in the LEFT picture.")
@@ -344,6 +392,15 @@ def open_page(video, setup, landmarks):
             done.set()
         return result
 
+    def on_measure():
+        return measure_session(session)
+
+    def on_use_measured():
+        return use_measured(session)
+
+    def on_save_gym(name):
+        return save_gym_session(session, name)
+
     with gr.Blocks(title="Mark the court") as demo:
         gr.Markdown(
             f"# Mark the court for {video}\n"
@@ -368,6 +425,14 @@ def open_page(video, setup, landmarks):
             undo_button = gr.Button("Undo last click")
             remove_button = gr.Button("Remove the chosen landmark from this picture")
             save_button = gr.Button("Save and close", variant="primary")
+        gr.Markdown("### Is this gym a different size? With 4+ landmarks at each end and a centre point, the tool can "
+                    "measure the court from your clicks (length, width, the lane, the lines).")
+        with gr.Row():
+            measure_button = gr.Button("Measure the court from my clicks")
+            use_button = gr.Button("Use the measured size")
+            gym_name = gr.Textbox(label="Gym name (to save this court for other videos)", placeholder="Southside Gym",
+                                  value=setup.get("gym") or "")
+            gym_button = gr.Button("Save this court as a gym")
         with gr.Row():
             diagram = gr.Image(first[3], label="Court diagram (green = clicked, red = not yet)", interactive=False,
                                format="jpeg", buttons=[])
@@ -380,6 +445,9 @@ def open_page(video, setup, landmarks):
         undo_button.click(on_undo, None, outputs)
         remove_button.click(on_remove, landmark_box, outputs)
         save_button.click(on_save, None, outputs)
+        measure_button.click(on_measure, None, outputs)
+        use_button.click(on_use_measured, None, outputs)
+        gym_button.click(on_save_gym, gym_name, outputs)
 
     click_tools.run_page(demo, done, temp_dir)
     return session["saved"]

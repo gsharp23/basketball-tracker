@@ -958,8 +958,8 @@ def stats_of(stem):
 
 
 def court_of(stem):
-    """{"length_ft", "width_ft"} of the game's court."""
-    return dict(zip(("length_ft", "width_ft"), shots.court_size(f"clips/{stem}")))
+    """{"length_ft", "width_ft", "lane_ft", "free_throw_ft", "three_point_ft"} of the game's court."""
+    return shots.court_size(f"clips/{stem}").as_dict()
 
 
 def marks_of(stem, label):

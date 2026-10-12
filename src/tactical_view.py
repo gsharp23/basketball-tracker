@@ -324,13 +324,13 @@ def diagram_point(layout, x, y):
             int(round(layout["top"] + (layout["court_width"] - y) * layout["scale"])))
 
 
-def blank_diagram(length, width, layout, legend):
+def blank_diagram(length, width, layout, legend, court_markings=None):
     """The court diagram without players. Drawn once; every frame starts from a copy."""
     diagram = np.full((DIAGRAM_HEIGHT, VIDEO_WIDTH, 3), SURROUND, np.uint8)
     cv2.rectangle(diagram, diagram_point(layout, -EDGE_FT, width + EDGE_FT),
                   diagram_point(layout, length + EDGE_FT, -EDGE_FT), OUT_OF_BOUNDS, -1)
     cv2.rectangle(diagram, diagram_point(layout, 0, width), diagram_point(layout, length, 0), FLOOR, -1)
-    for line in court_model.court_lines(length, width):
+    for line in court_model.court_lines(length, width, **court_model.extra(court_markings)):
         pixels = np.array([diagram_point(layout, x, y) for x, y in line], np.int32)
         cv2.polylines(diagram, [pixels], False, LINE, 2, cv2.LINE_AA)
     middle = width / 2
@@ -397,7 +397,7 @@ def draw_game_view(frame, size, record, H, placed, colours, numbers, court, cloc
         without_lines = view.copy()
         # H expects full-size pixels: first scale the small picture's pixels back up.
         grow = np.diag([1 / shrink, 1 / shrink, 1.0])
-        court_model.draw_court(view, H @ grow, court[0], court[1], OVERLAY, 1)
+        court_model.draw_court(view, H @ grow, court[0], court[1], OVERLAY, 1, **court_model.extra(court))
         # The lines are on the floor, so they should not run across the players.
         for x1, y1, x2, y2 in boxes:
             view[y1:y2, x1:x2] = without_lines[y1:y2, x1:x2]
@@ -463,14 +463,14 @@ def render(video, positions):
     source = config.require_video(video)
     tracks = load_tracks(video)
     homographies = court_mapper.load_homographies(video)
-    court = (positions["court"]["length_ft"], positions["court"]["width_ft"])
+    court = court_model.court_from(positions["court"])
     colours, legend = load_team_colours(video)
     numbers = load_numbers(video)
     records = {record["frame"]: record for record in tracks["frames"]}
     spots = {entry["frame"]: entry["players"] for entry in positions["frames"]}
 
     layout = diagram_layout(*court)
-    blank = blank_diagram(court[0], court[1], layout, legend)
+    blank = blank_diagram(court[0], court[1], layout, legend, court)
     # Game view: full width, same shape as the video, an even number of rows (H.264 needs that).
     view_size = (VIDEO_WIDTH, 2 * round(VIDEO_WIDTH * tracks["height"] / tracks["width"] / 2))
     size = (VIDEO_WIDTH, view_size[1] + DIAGRAM_HEIGHT)
