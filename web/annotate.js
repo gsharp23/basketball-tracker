@@ -371,6 +371,7 @@ function startDrawing() {
   page.drawing = !page.drawing;
   page.selected = -1;
   byId('editor').classList.toggle('drawing', page.drawing);
+  byId('btn-draw').classList.toggle('on', page.drawing);
   render();
   if (page.drawing) toast('Drag on the picture to draw a ' + page.cls + ' box.', '');
 }
@@ -471,7 +472,7 @@ function onKey(event) {
   else if (key === 'z' || key === 'Z') tryToast(undo);
   else if (key === 'b' || key === 'B') startDrawing();
   else if (key === 'Delete' || key === 'Backspace') { event.preventDefault(); deleteSelected(); }
-  else if (key === 'Escape') { page.drawing = false; byId('editor').classList.remove('drawing'); byId('draft').hidden = true; page.drag = null; page.selected = -1; render(); }
+  else if (key === 'Escape') { page.drawing = false; byId('editor').classList.remove('drawing'); byId('btn-draw').classList.remove('on'); byId('draft').hidden = true; page.drag = null; page.selected = -1; render(); }
   else if (key >= '1' && key <= '9' && page.classes[Number(key) - 1]) chooseClass(page.classes[Number(key) - 1]);
 }
 
@@ -487,6 +488,7 @@ function wire() {
   byId('btn-noball').addEventListener('click', function () { tryToast(function () { return answer('noball'); }); });
   byId('btn-skip').addEventListener('click', function () { tryToast(function () { return answer('skip'); }); });
   byId('btn-undo').addEventListener('click', function () { tryToast(undo); });
+  byId('btn-draw').addEventListener('click', startDrawing);
   byId('assist').addEventListener('change', function () { page.assist = byId('assist').checked; page.selected = -1; showAssistWords(); render(); drawInset(); });
   for (const button of byId('modes').children) {
     button.addEventListener('click', function () { tryToast(function () { return setMode(button.dataset.mode); }); });

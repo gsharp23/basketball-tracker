@@ -482,3 +482,6 @@ pre.log { font-size: 13px; line-height: 1.35; background: var(--bg); padding: 10
   .door-text { font-size: 17px; }
   .problem { padding: 22px 18px; margin: 16px auto; }
 }
+
+/* A toolbar button that is switched on (the annotate page's Draw a box). */
+.btn.on { background: var(--ink, #111); color: #fff; border-color: var(--ink, #111); }
