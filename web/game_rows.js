@@ -1,6 +1,7 @@
 /* What the Season page and the Games page share: one game as a table row (date, opponent, result, status,
-   the action to offer), "Run here" (main.py on this laptop), "Run on Colab" (through the Google Drive folder),
-   and the "Add a game" panel that puts a video in a season with its opponent, date and score.
+   the action to offer), "Run on Colab" (through the Google Drive folder), "Redo the stats" (the one job still
+   run on this laptop: seconds, after a roster change), and the "Add a game" panel that puts a video in a
+   season with its opponent, date and score.
    The rows come from the seasons module (GET /api/seasons/<id>/summary or /api/seasons/games): each row is
    library.game_row() plus status_words, chip, action, progress_words and estimate.
    The page sets GameRows.reload (how it re-reads its data) and GameRows.clipsFolder before using the panel. */
@@ -40,28 +41,30 @@ function editLink(row) {
   return el('a', { href: '#', class: 'small', onclick: function (event) { event.preventDefault(); openAddPanel(row.stem); } }, 'Edit');
 }
 
+// What a row offers. Processing happens on Colab: the laptop marks the court first, then sends the game.
+//   finished            Open
+//   running (a job)     Progress
+//   roster changed      Redo the stats (seconds, on this laptop: only the stats are older than the roster), Open
+//   anything else       Mark court (until the court is marked) · Run on Colab · Open (when some results exist)
 function actionsFor(row) {
   const parts = [];
   if (row.action === 'open') parts.push(gameLink(row, 'Open'));
   else if (row.action === 'progress') parts.push(gameLink(row, 'Progress'));
-  else if (row.action === 'mark court') parts.push(gameLink(row, 'Mark court', '#court'));
-  else if (row.action === 'carry on') {
-    parts.push(el('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: function () { runHere(row, this); } }, 'Carry on'));
+  else if (row.roster_changed) {
+    parts.push(el('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: function () { runHere(row, this); } }, 'Redo the stats'));
     parts.push(gameLink(row, 'Open'));
-    // A game that was on Colab and now has its court marked: the court files go to Colab, which finishes it.
-    if (row.processed_on === 'colab') parts.push(colabButton(row));
   } else {
-    // Not started here, or sent to Colab and not back yet: both ways stay open (a game Colab failed on, or whose
-    // video left the inbox, is sent again with "Run on Colab").
-    parts.push(el('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: function () { runHere(row, this); } }, 'Run here'));
+    if (!row.court_marked) parts.push(gameLink(row, 'Mark court', '#court'));
     parts.push(colabButton(row));
+    if (row.action === 'carry on' || row.action === 'mark court') parts.push(gameLink(row, 'Open'));
   }
   parts.push(editLink(row));
   return el('div', { class: 'actions' }, parts);
 }
 
 function colabButton(row) {
-  return el('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: function () { runOnColab(row, this); } }, 'Run on Colab');
+  return el('button', { class: 'btn ' + (row.court_marked ? 'btn-red' : 'btn-outline') + ' btn-sm', type: 'button',
+                        onclick: function () { runOnColab(row, this); } }, 'Run on Colab');
 }
 
 // chip = true draws the words as a coloured chip (the Games page); the Season page shows plain words.
@@ -209,9 +212,12 @@ async function importNow(row, button) {
 }
 
 async function runOnColab(row, button) {
-  const question = 'Send ' + gameTitle(row) + ' to Google Drive for Colab?\n\n' +
-    'The video is copied into the Drive folder on this computer; Google Drive for desktop then uploads it to your Google account, ' +
-    'and Colab processes it (about an hour) once its notebook is running. The results come back the same way.';
+  const court = row.court_marked
+    ? 'The court is marked, so Colab runs every step and the stats come back by themselves.'
+    : 'THE COURT IS NOT MARKED YET: Colab will do the long steps and then wait for it. Press Cancel and Mark court first to get the whole game in one go.';
+  const question = 'Send ' + gameTitle(row) + ' to Google Drive for Colab?\n\n' + court + '\n\n' +
+    'The video is copied into the Drive folder on this computer; Google Drive for desktop uploads it to your Google account. ' +
+    'Then open Colab (the button at the top) and press Run all; a full game takes 3 to 4 hours there. The results come back the same way.';
   if (!window.confirm(question)) return;
   button.disabled = true;
   try {

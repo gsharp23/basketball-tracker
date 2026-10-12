@@ -152,7 +152,6 @@ async function showSettings() {
     sizes.appendChild(el('option', { value: key }, size.label + ' · ' + size.length_ft + ' × ' + size.width_ft + ' ft'));
   }
   sizes.value = settings.court_size;
-  byId('run-where').value = settings.run_where;
   byId('make-videos').checked = settings.make_videos;
   byId('drive-folder').value = settings.drive_folder;
   byId('drive-path').value = settings.drive_folder_path || '';
@@ -167,7 +166,6 @@ async function saveAll() {
   await tryToast(async function () {
     const reply = await putJSON('/api/settings', {
       court_size: byId('court-size').value,
-      run_where: byId('run-where').value,
       make_videos: byId('make-videos').checked,
       drive_folder: byId('drive-folder').value,
       drive_folder_path: byId('drive-path').value.trim(),

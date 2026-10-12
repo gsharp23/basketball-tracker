@@ -8,19 +8,27 @@
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="app.css">
 </head>
-<body class="area-analysis">
-<header class="site-header" id="site-header"></header>
-
-<main class="page">
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
   <div class="page-head">
     <div class="head-text">
       <h1 class="title">Games</h1>
       <div class="subtitle" id="games-line">Every video in the clips folder, grouped by season.</div>
     </div>
     <div class="head-side">
+      <input id="games-filter" class="input" type="search" placeholder="Find a game" aria-label="Find a game" style="min-height: 44px; min-width: 180px">
       <button class="btn btn-outline" id="refresh" type="button">Refresh</button>
+      <a class="btn btn-outline" id="colab-open" href="https://colab.research.google.com/" target="_blank" rel="noopener">Open Colab ↗</a>
       <button class="btn btn-red" id="add-game" type="button">Add a game</button>
     </div>
+  </div>
+
+  <div class="callout callout-grey">
+    <b>How a game gets processed.</b> 1 · Copy the video into the clips folder and press Add a game. 2 · Mark the court (Mark court on the row: about ten minutes of clicking).
+    3 · Press Run on Colab: the video and the court files go to your Google Drive. 4 · Open Colab and press Run all there; it works through every game in the inbox and the results come back here by themselves.
+    Stop the Colab runtime when its log says "Nothing to do".
   </div>
 
   <!-- "Add a game": the plain steps and the form that puts a video in a season (shared with the Season page) -->
@@ -60,7 +68,8 @@
   <div class="stack" id="season-groups" style="gap: 22px">
     <div class="hint">Reading the games...</div>
   </div>
-</main>
+  </main>
+</div>
 <script src="app.js"></script>
 <script src="game_rows.js"></script>
 <script src="games.js"></script>

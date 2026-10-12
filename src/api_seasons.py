@@ -20,7 +20,9 @@ GET /api/drive/status/{stem}); the pages only show what it answers.
 from fastapi import APIRouter, HTTPException
 
 import config
+import court_mapper
 import dash_common
+import drive_link
 import library
 import main
 
@@ -70,7 +72,8 @@ def with_status(row):
 
     "status_words" is short ("Running here · 57%"), "progress_words" the whole line (step, how far, time left);
     "action": "open" (finished), "progress" (running), "mark court", "carry on" (stopped part-way, or "Roster changed"
-    when only the stats are older than the roster), "run" (not started); "estimate": how long a run takes on this laptop.
+    when only the stats are older than the roster), "run" (not started); "estimate": how long a run takes on this laptop;
+    "court_marked": whether the court set-up is done (the pages ask for it before a game is sent to Colab).
     """
     status, progress = row["status"], None
     if status in ("running", "stopped part-way"):
@@ -90,6 +93,7 @@ def with_status(row):
     row["progress"] = progress
     row["progress_words"] = running_words(progress) if progress else ""
     row["estimate"] = laptop_estimate(row["seconds"])
+    row["court_marked"] = not court_mapper.setup_missing(row["video"])        # the court is marked before the send
     if row["roster_changed"]:
         # Not really stopped: every step is done, only the stats are older than the roster.
         row.update(status_words="Roster changed", estimate="seconds",
@@ -154,6 +158,7 @@ def all_games():
     unassigned.reverse()
     return {"seasons": groups, "unassigned": unassigned, "clips_folder": main.windows_path(config.CLIPS_DIR),
             "busy": dash_common.what_is_running(), "run_where": dash_common.load_settings()["run_where"],
+            "colab_url": drive_link.PROCESS_NOTEBOOK_URL,
             "games_total": sum(len(group["games"]) for group in groups) + len(unassigned)}
 
 

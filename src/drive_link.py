@@ -56,6 +56,8 @@ Problem = library.Problem
 CHUNK = 8 * 1024 * 1024            # a video is copied 8 MB at a time, so progress can be shown
 STALE_MINUTES = 20                 # Colab reports every minute while it runs; silence this long is worth saying
 POLL_SECONDS = 60                  # how often the watcher looks in the outbox
+# The processing notebook on GitHub, opened in Colab: the one click a laptop cannot do for the coach.
+PROCESS_NOTEBOOK_URL = "https://colab.research.google.com/github/gsharp23/basketball-tracker/blob/main/colab/process_games.ipynb"
 MODEL_NAME = "player_detector.pt"  # the file name the Colab worker expects in models/
 # Files only the coach writes on this laptop: never replaced by Colab's copy.
 COACH_FILES = {"game_info.json", "shots.json", "possessions.json"}

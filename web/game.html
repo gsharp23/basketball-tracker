@@ -212,7 +212,8 @@
     <div class="note" id="processing-text"></div>
     <div class="callout" id="processing-flags" hidden></div>
     <div class="row">
-      <button class="btn btn-red" id="process-start" type="button">Process this game</button>
+      <button class="btn btn-red" id="process-start" type="button">Send to Colab</button>
+      <a class="btn btn-outline" id="process-colab-link" href="https://colab.research.google.com/github/gsharp23/basketball-tracker/blob/main/colab/process_games.ipynb" target="_blank" rel="noopener">Open Colab ↗</a>
       <button class="btn btn-light" id="process-stop" type="button" hidden>Stop</button>
       <button class="btn btn-link" id="log-toggle" type="button">Details</button>
     </div>
@@ -234,8 +235,7 @@
       <div class="callout" id="court-provisional" hidden>This game's landmarks are stand-in clicks, not yours: every position is provisional until you do step 2 yourself.</div>
       <div id="court-steps"></div>
       <div class="row">
-        <button class="btn btn-red btn-big" id="court-process" type="button">Process this game</button>
-        <button class="btn btn-outline btn-big" id="court-colab" type="button" hidden>Run on Colab</button>
+        <button class="btn btn-red btn-big" id="court-colab" type="button">Send to Colab</button>
         <span class="hint" id="court-hint"></span>
       </div>
       <div id="court-check" hidden>

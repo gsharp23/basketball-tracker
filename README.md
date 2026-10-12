@@ -128,35 +128,37 @@ python src/dashboard.py --make-shortcut
 ### Two areas, one start page
 
 The start page (`index.html`) is the one door between two separate
-applications. **Game analysis** is for coaching: seasons, teams, games and
-players, in the look of a video platform (dark header, white cards, red
-accent). **Model training** is for the tool itself: teaching the detector to
-find the ball, the referees and the players in the team's own gyms, in the
-look of a labelling tool (charcoal sidebar with five numbered steps, yellow
-accent). Inside either area the header or sidebar has "← Start page" and no
+applications. **Game analysis** is for coaching and shows stats only: the
+season and its schedule, the teams and the players, in the look of a video
+platform (dark header, white cards, red accent). **Processing & training** is
+for the tool itself: getting a game processed (add the video, mark the court,
+send it to Colab) and teaching the detector to find the ball, the referees
+and the players in the team's own gyms, in the look of a labelling tool
+(charcoal sidebar: the Games screen, then five numbered training steps,
+yellow accent). Inside either area the header or sidebar has "← Start page" and no
 link to the other area; the Settings cog on the start page opens Settings.
 
 ```mermaid
 flowchart LR
     start[Start page<br/>index.html] --> analysis
     start --> training
-    start --> settings[Settings<br/>school, storage, Drive, Colab, processing, roster, play types]
+    start --> settings[Settings<br/>school, storage, Drive, Colab, roster, play types]
 
-    subgraph analysis [Game analysis]
-        seasons[Seasons] --> season[Season] --> game[Game]
-        games[Games] --> game
+    subgraph analysis [Game analysis: stats]
+        season[Season · schedule] --> game[Game]
+        seasons[All seasons] --> season
         players[Players]
-        teams[Teams] --> team[Team] --> report[Scouting report]
+        teams[Teams · map] --> team[Team] --> report[Scouting report]
         game --> tag[Tag shots and plays]
     end
 
-    subgraph training [Model training]
-        overview[Overview] --> upload[1 Upload] --> annotate[2 Annotate] --> dataset[3 Dataset] --> models[4 Train · 5 Models]
+    subgraph training [Processing & training]
+        games[Games] --> court[Mark the court]
+        overview[Training overview] --> upload[1 Upload] --> annotate[2 Annotate] --> dataset[3 Dataset] --> models[4 Train · 5 Models]
     end
 
-    game -- Run here --> pipeline[main.py on this laptop]
-    game -- Run on Colab --> drive[Drive folder<br/>drive_link.py] --> worker[colab_worker.py<br/>on Colab] --> drive --> results[(data, outputs, crops)]
-    pipeline --> results --> analysis
+    court -- Run on Colab --> drive[Drive folder<br/>drive_link.py] --> worker[colab_worker.py<br/>on Colab] --> drive --> results[(data, outputs, crops)]
+    results --> analysis
     dataset -- dataset zip --> drive2[Drive folder<br/>training/] --> notebook[train_detector.ipynb<br/>on Colab] --> drive2 --> models
     models -- Use this one --> pipeline
 ```
@@ -173,7 +175,7 @@ kept or shared between the screens.
 |---|---|
 | Season (`season.html`) | **The first screen of Game analysis**: the current season, with a dropdown to switch to an earlier one (or to "All seasons"). The five tiles (Record, Points per game, Allowed per game, Field goals, Threes), **Points by game** (us in red, the opponents in grey; a hollow dot is the points from the tagged shots standing in for a final score that has not been typed), the **season shot map** with the share of points from the paint, threes and free throws, the **schedule** (every game of the season in date order: date and tip-off, home or away, the opponent, the result, and the video's state when one is linked; a video that is on no scheduled game is listed too), the leaders. "Add a game" puts a game on the schedule: date, tip-off, opponent, home or away, kind, the score, and a video to link if there is one already; Edit on a row changes the same things or takes the game off the schedule. "Roster": jersey number and name per player of this season. A season that is not the current one can be made current |
 | Seasons (`seasons.html`) | "All seasons": one card per season (the record, games, points per game, a small line of the points by game, the last game); "New season" (name, first day, make it the current one, the roster); an "Unassigned" card when videos are in no season; the eight most recent games with their state. A season that is not current can be deleted here (its games become Unassigned) |
-| Games (`games.html`) | Every video in the clips folder, grouped by season, with the same rows as the Season screen: Date, Opponent, Result and a status chip, and what to do next: **Open** (finished), **Progress** (running here), **Mark court**, **Carry on** (stopped part-way; "Roster changed" when every step is done and only the stats are older than `roster.json`: Carry on then redoes the stats alone, in seconds), **Run here** or **Run on Colab** (not started), Edit. A game sent to Colab keeps both **Run here** and **Run on Colab** until it is finished (so a game Colab failed on, or whose court files are needed, can be sent again from here), and its status cell offers **Import now** while Colab is done and the results have not been brought back yet. The header's search box filters the rows |
+| Games (`games.html`) | **In the processing area.** Every video in the clips folder, grouped by season: Date, Opponent, Result, a status chip, and what to do next: **Mark court** (until the court is marked), **Run on Colab** (the video and the court files go to the Drive folder; the confirmation says whether the court is marked), **Open** (results exist), **Progress** (a run is going), **Redo the stats** (after a roster change: seconds, on the laptop), Edit; **Import now** while Colab is done and the results have not come back yet. "Open Colab" at the top opens the processing notebook; a note on the screen gives the four steps of the flow. The box at the top filters the rows |
 | Players (`players.html`) | Season totals for every player on the roster: points and shots from the tagged shots, time on camera and distance from the processed games. Click a player for his season shot map, points by area and a game-by-game table |
 | Teams (`teams.html`) | **Where they are**: a map (OpenStreetMap through Leaflet; the one part of Game analysis that needs the internet) with home as a star and each opponent as a dot in its colour, a popup with the record against them and a link to the team. Then a card per opponent (Opponents: this season's; All seasons: everyone; Our team: one card per season for our own side) with the record against them over the schedules, their record as typed, where they are, main defense and offense, whether they press, points per game, the defense mix; "Add a team"; the compare table (share of possessions by offense type, points per possession) |
 | Team (`team.html`) | One opponent. **About them**: where they are, their record and points as typed or pasted, coach, level, the links to their pages (MaxPreps, the school site...) that open in a new tab, their roster, and when it was typed; **Edit** opens the form ("Find on the map" asks OpenStreetMap for the place typed; a pasted roster page is read line by line for the numbers and names). **Head to head**: the record, points for and against and the upcoming games over every season's schedule, videos or not. Then what they run on offense, how they defend us, where they score (their tagged shots), their players by jersey number with the coach's notes, the games against them on video, the scouting report (PDF) |
@@ -192,23 +194,25 @@ kept or shared between the screens.
    can be typed now or later.
 3. Fill in the roster (Settings, or "Roster" on the season) if you have the
    numbers and names, best before step 4.
-4. **Run here** on the game's row: it finds the players, the teams and the
-   jersey numbers (many hours for a full game), and then waits for the court.
-   Or **Run on Colab**: the video goes into the Drive folder and Colab does the
-   same work in a fraction of the time (see "Running a game on Colab").
-5. Mark the court: the row says "Needs the court marked", and the Court set-up
-   panel at the bottom of the Game screen opens the three click pages. This can
-   be done while step 4 is still running.
-6. "Process this game" there: positions, the court view, the stats.
+4. **Mark court** on the game's row: the Court set-up panel at the bottom of
+   the Game screen opens the three click pages (about ten minutes).
+5. **Run on Colab** on the row (or "Send to Colab" on the Game screen): the
+   video and the court files go into the Drive folder, and Colab does every
+   step, 3 to 4 hours for a full game (see "Running a game on Colab"). Then
+   **Open Colab** (the button at the top of the Games screen) and press Run
+   all there. A game sent before its court is marked stops at the court step
+   and waits; marking it and pressing Run on Colab again finishes it.
+6. The results come back by themselves while the dashboard is open.
 7. Open the game, tag the shots and label the possessions ("Tag shots and
    plays"). The season, the players and the opponent's team page fill
    themselves from that.
 
 Good to know:
 
-- **One game at a time.** "Run here" is refused while another game is being
-  processed, also when that run was started in a terminal. A run started in a
-  terminal can be watched on the Games screen but not stopped there.
+- **The laptop does not process games any more.** `python src/main.py` still
+  works from a terminal (a day or two per game), and a run started that way
+  can be watched on the Games screen; the only job the screens still run on
+  the laptop is "Redo the stats", after a roster change, in seconds.
 - **The browser page can be closed** while a game is processed; the work goes
   on, and the page finds it again. The black window (or the terminal the
   dashboard was started in) must stay open.
@@ -230,8 +234,7 @@ Good to know:
   laptop can ask.
 - **Some settings are stored, not yet acted on.** The court size is kept, but
   the first click page still asks for it; "Make the videos" is kept, but
-  `main.py` has no option to skip the videos yet. "Run new games on" is a
-  reminder only: each game's row offers both buttons.
+  `main.py` has no option to skip the videos yet.
 - **Provisional numbers are labelled.** A game whose court was marked with
   stand-in clicks (the test clip) says so on every screen that uses positions:
   positions, 2-or-3, shot maps, distances and sprints are provisional until
@@ -318,7 +321,7 @@ one stylesheet, `web/app.css`, taken from the approved design.
 | `src/api_drive.py` | The Google Drive link, with the logic in `src/drive_link.py` |
 | `src/api_settings.py` | The Settings screen's own routes (school, logo, "Check everything", the notebook) |
 | `web/app.css`, `web/app.js` | The shared look and the shared JavaScript: fetching, the header and the sidebar, messages, the half-court drawing, formatting, watching a job |
-| `web/game_rows.js` | A game's row with its status and buttons, "Run here", "Run on Colab" and the "Add a game" panel, shared by the Season and Games screens |
+| `web/game_rows.js` | A game's row with its status and buttons, "Mark court", "Run on Colab", "Redo the stats" and the "Add a game" panel, shared by the Season and Games screens |
 | `web/team_parts.js` | The tables of the Team screen, shared with the scouting report |
 | `web/*.html` and `.js` | The screens: `index`, `seasons`, `season`, `games`, `players`, `teams`, `team`, `report`, `game`, `tag`, `settings`; `train`, `upload`, `annotate`, `dataset`, `models` |
 
@@ -521,7 +524,7 @@ game. Download `colab/process_games.ipynb` once and keep it in Colab.
    on the Game screen and press Run on Colab again (on the game's row, or the
    button in the Court set-up panel): only the court files go, and the worker
    finishes the positions and stats the next time it looks. A game Colab
-   failed on keeps its Run on Colab (try again) and Run here buttons.
+   failed on keeps its Run on Colab button (try again).
 5. If Colab goes quiet for 20 minutes while a game is "running", the row says
    so: the notebook has stopped (the tab closed, or the free session ended);
    press Run all again and it carries on where it stopped.
@@ -548,8 +551,8 @@ Drive folder has everything that was printed.
   coach's own button press each time.
 - The roster never leaves the laptop, so on Colab the numbers are read
   without it (a number that is on neither team counts as a full vote there)
-  and the stats have no names. Pressing "Carry on" on the laptop afterwards
-  redoes the stats step with the roster in seconds.
+  and the stats have no names. Pressing "Redo the stats" on the Games screen
+  afterwards redoes the stats step with the roster in seconds.
 - One game at a time; the games are taken in name order.
 - The code takes the graphics card by itself when there is one
   (`HOOPS_DEVICE=auto` is the default; `HOOPS_DEVICE=cpu` forces the CPU).

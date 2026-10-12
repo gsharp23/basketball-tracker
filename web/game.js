@@ -792,7 +792,7 @@ function showProcessing(info, status) {
   byId('processing-progress').hidden = !running;
   byId('process-stop').hidden = !running;
   byId('process-start').hidden = running;
-  byId('process-start').textContent = status === 'stopped part-way' ? 'Carry on' : 'Process this game';
+  byId('process-colab-link').hidden = running;
   const text = byId('processing-text');
   if (running) {
     const step = progress.step ? (STEP_WORDS[progress.step] || progress.step) : 'Starting up';
@@ -803,12 +803,12 @@ function showProcessing(info, status) {
     byId('processing-detail').textContent = (progress.step_count ? 'Step ' + progress.step_number + ' of ' + progress.step_count : 'Getting ready: loading the programs (about half a minute)') +
       (percent === null ? '' : ' · ' + percent + '%') + (progress.detail ? ' · ' + progress.detail : '');
     text.textContent = 'The results appear here when every step is done. You can close this page; the processing goes on while the black Hoops Tracker window is open.';
-  } else if (progress.ended === 'court') {
-    text.textContent = 'Stopped at the court step: the players, teams and jersey numbers are done. Mark the court below, then press "Process this game" to carry on.';
-  } else if (progress.ended === 'stopped') {
-    text.textContent = 'Stopped part-way. What was finished is kept: press "Carry on" to continue from there.';
+  } else if (progress.ended === 'court' || status === 'needs the court marked') {
+    text.textContent = 'The players, teams and jersey numbers are done. Mark the court below, then press "Send to Colab": the court files go up and Colab finishes the positions and stats.';
+  } else if (progress.ended === 'stopped' || status === 'stopped part-way') {
+    text.textContent = 'Stopped part-way. What was finished is kept: "Send to Colab" picks it up from there.';
   } else if (summary.game.roster_changed) {
-    text.textContent = 'The roster changed after the stats were made. "Carry on" redoes only the stats, with the new names, in seconds.';
+    text.textContent = 'The roster changed after the stats were made. "Redo the stats" on the Games screen redoes only the stats, with the new names, in seconds.';
   } else if (progress.ended === 'finished') {
     text.textContent = 'Every step is done.' + (status === 'finished' ? '' : ' (The files have changed since, so some steps would be done again.)');
     if (status === 'finished') card.hidden = true;
@@ -817,8 +817,8 @@ function showProcessing(info, status) {
     byId('processing-log').hidden = false;
   } else {
     text.textContent = status === 'not started'
-      ? 'Finds the players, sorts them into teams, reads the jersey numbers, maps the court and works out the stats. On this laptop this game takes ' + summary.estimate + '.'
-      : 'Press the button to run the steps that are not done yet.';
+      ? 'Colab finds the players, sorts them into teams, reads the jersey numbers, maps the court and works out the stats: 3 to 4 hours for a full game. Mark the court below first, then press "Send to Colab".'
+      : 'Press "Send to Colab" to run the steps that are not done yet.';
   }
   const flags = byId('processing-flags');
   flags.hidden = !(info.flagged && info.flagged.length);
@@ -839,19 +839,22 @@ let courtHint = '';
 // "Run on Colab" for a game that is on Colab (its court files go there and Colab finishes the positions and stats).
 function syncCourtButtons() {
   const above = !byId('processing').hidden;
-  const onColab = !!(summary && summary.info.processed_on === 'colab');
-  byId('court-process').hidden = above;
-  byId('court-colab').hidden = !onColab;
-  byId('court-hint').textContent = (above ? 'Then press the button in the card above. ' : courtHint + ' ')
-    + (onColab ? 'Run on Colab sends the court files to Colab, which finishes the positions and stats.' : '');
+  byId('court-colab').hidden = above;
+  byId('court-hint').textContent = above ? 'Then press "Send to Colab" in the card above.' : courtHint;
 }
 
+// The one way a game is processed: the video (once) and the court files go to the Drive folder, and Colab,
+// once its notebook is running, does the rest. A game already on Colab sends only the court files.
 async function sendToColab(button) {
-  if (!window.confirm('Send this game\'s court files to Google Drive for Colab? Colab finishes the positions and stats the next time its notebook looks.')) return;
+  const marked = summary && summary.court && summary.court.ready;
+  const words = marked
+    ? 'Send this game to Google Drive for Colab? The court is marked, so Colab runs every step and the stats come back by themselves.'
+    : 'The court is not marked yet. Colab would do the long steps and then wait for the court. Send anyway? (Cancel, and do steps 1 and 2 below first, to get the whole game in one go.)';
+  if (!window.confirm(words + '\n\nThen open Colab (Open Colab button) and press Run all. A full game takes 3 to 4 hours there.')) return;
   button.disabled = true;
   const reply = await tryToast(function () { return postJSON('/api/drive/send/' + enc(current.name)); });
   button.disabled = false;
-  if (reply) toast(reply.message || 'Sent.', 'good');
+  if (reply) { toast(reply.message || 'Sent.', 'good'); await reload(); watchProcessing(); }
 }
 
 async function startProcessing(button) {
@@ -897,8 +900,8 @@ async function loadCourt() {
   holder.replaceChildren();
   court.steps.forEach(function (step) { holder.appendChild(courtStep(step, court)); });
   courtHint = court.ready
-    ? 'Runs the steps that use the court (mapping, positions, court view, stats).'
-    : 'Do steps 1 and 2 first. Processing started now does the long steps that need no court, then waits for it.';
+    ? 'The court is marked: Colab runs every step, including the positions and the stats.'
+    : 'Do steps 1 and 2 first. A game sent now does the long steps on Colab, then waits for the court.';
   syncCourtButtons();
   byId('court-check').hidden = !court.court_check_url;
   byId('court-check-picture').dataset.src = court.court_check_url || '';
@@ -978,8 +981,7 @@ byId('our-team').addEventListener('change', chooseOurTeam);
 byId('our-team-cancel').addEventListener('click', closeForms);
 byId('opponent-form').addEventListener('submit', saveOpponent);
 byId('opponent-cancel').addEventListener('click', closeForms);
-byId('process-start').addEventListener('click', function () { startProcessing(this); });
-byId('court-process').addEventListener('click', function () { startProcessing(this); });
+byId('process-start').addEventListener('click', function () { sendToColab(this); });
 byId('court-colab').addEventListener('click', function () { sendToColab(this); });
 byId('process-stop').addEventListener('click', function () { stopProcessing(this); });
 byId('log-toggle').addEventListener('click', function () {

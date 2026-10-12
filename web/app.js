@@ -193,8 +193,7 @@ function brandBlock(areaWords) {
 
 /* ---- Game analysis: the header ---- */
 
-const NAV_LINKS = [['seasons', 'Season', 'season.html'], ['teams', 'Teams', 'teams.html'],
-                   ['games', 'Games', 'games.html'], ['players', 'Players', 'players.html']];
+const NAV_LINKS = [['seasons', 'Season', 'season.html'], ['teams', 'Teams', 'teams.html'], ['players', 'Players', 'players.html']];
 
 // Fill <header id="site-header"> with the logo, the nav, the search box and "← Start page".
 // `active` marks the screen ('seasons' | 'teams' | 'games' | 'players' | ''). options.search(text) answers typing.
@@ -208,7 +207,7 @@ function renderHeader(active, options) {
   const search = el('input', { id: 'site-search', class: 'search', type: 'search', placeholder: 'Search games, teams, players' });
   search.addEventListener('input', function () { if (options.search) options.search(search.value.trim()); });
   search.addEventListener('keydown', function (event) {
-    if (event.key === 'Enter' && !options.search) location.href = withParams('games.html', { q: search.value.trim() });
+    if (event.key === 'Enter' && !options.search) location.href = withParams('season.html', {});
   });
   const side = el('div', { class: 'header-side' }, [
     el('label', { for: 'site-search', class: 'visually-hidden' }, 'Search'), search,
@@ -216,9 +215,9 @@ function renderHeader(active, options) {
   header.replaceChildren(brandBlock('GAME ANALYSIS'), nav, side);
 }
 
-/* ---- Model training: the sidebar ---- */
+/* ---- Processing and training: the sidebar (the Games screen first, then the five training steps) ---- */
 
-const SIDEBAR_LINKS = [['overview', 'Overview', 'train.html'], ['upload', '1 · Upload', 'upload.html'],
+const SIDEBAR_LINKS = [['games', 'Games · process', 'games.html'], ['overview', 'Training overview', 'train.html'], ['upload', '1 · Upload', 'upload.html'],
                        ['annotate', '2 · Annotate', 'annotate.html'], ['dataset', '3 · Dataset', 'dataset.html'],
                        ['train', '4 · Train', 'models.html#train'], ['models', '5 · Models', 'models.html']];
 
@@ -229,7 +228,7 @@ function renderSidebar(active) {
   const links = SIDEBAR_LINKS.map(function (link) {
     return el('a', { href: link[2], class: 'step-link' + (link[0] === active ? ' active' : '') }, link[1]);
   });
-  aside.replaceChildren(brandBlock('MODEL TRAINING'), ...links, el('div', { class: 'grow' }),
+  aside.replaceChildren(brandBlock('PROCESSING & TRAINING'), ...links, el('div', { class: 'grow' }),
                         el('a', { href: 'index.html', class: 'start-link' }, '← Start page'));
 }
 

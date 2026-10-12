@@ -1,13 +1,14 @@
-/* The Games screen: every video in the clips folder, grouped by season (the current season first), with
-   the state of each game and what to do next: Open, Progress, Mark court, Carry on, Run here, Run on Colab.
-   The rows, the runs and the "Add a game" panel are shared with the Season page: web/game_rows.js.
-   Data: GET /api/seasons/games. ?q=words filters the rows (the header search box sends it); ?game=<name>
-   points at one game. */
+/* The Games screen of the processing area: every video in the clips folder, grouped by season (the current
+   season first), with the state of each game and what to do next: Mark court, Run on Colab, Open, Progress.
+   Processing happens on Colab; this laptop only marks the court and moves files through Google Drive.
+   The rows and the "Add a game" panel are shared with the Season page: web/game_rows.js.
+   Data: GET /api/seasons/games. ?q=words filters the rows; ?game=<name> points at one game. */
 
 let reply = null;         // GET /api/seasons/games
 let searchText = (urlParam('q') || '').toLowerCase();
 
-renderHeader('games', { search: function (text) { searchText = text.toLowerCase(); showGroups(); } });
+renderSidebar('games');
+byId('games-filter').addEventListener('input', function () { searchText = byId('games-filter').value.trim().toLowerCase(); if (reply) showGroups(); });
 
 function matches(row) {
   if (!searchText) return true;
@@ -62,6 +63,7 @@ function showGroups() {
 async function load() {
   reply = await api('/api/seasons/games');
   GameRows.clipsFolder = reply.clips_folder;
+  if (reply.colab_url) byId('colab-open').href = reply.colab_url;
   GameRows.defaultSeason = (reply.seasons.find(function (group) { return group.current; }) || { id: 'unassigned' }).id;
   showGroups();
 }
@@ -70,8 +72,7 @@ GameRows.reload = load;
 wireAddPanel();
 byId('add-game').addEventListener('click', function () { openAddPanel(urlParam('game')); });
 byId('refresh').addEventListener('click', function () { tryToast(load); });
-const box = document.getElementById('site-search');
-if (box && searchText) box.value = urlParam('q');
+if (searchText) byId('games-filter').value = urlParam('q');
 load().catch(function (problem) {
   toast(problem.message, 'bad');
   byId('season-groups').replaceChildren(el('div', { class: 'callout callout-red' }, problem.message));
