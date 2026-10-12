@@ -539,6 +539,9 @@ def results_missing(video, saved):
     return missing
 
 
+_crop_threads = []        # the background copies of player pictures (see import_results)
+
+
 def import_results(stem):
     """Bring a game's results back from outbox/<stem>/ into data/, outputs/ and crops/.
 
@@ -579,6 +582,7 @@ def import_results(stem):
     crops_thread = threading.Thread(target=lambda: mirror_in(outbox / "crops", config.crops_dir(video)),
                                     daemon=True, name=f"drive-crops-{stem}")
     crops_thread.start()
+    _crop_threads.append(crops_thread)          # the command line waits for these before it exits
     library.save_game_info(stem, {"processed_on": "colab"})
     when = now_text()
     result = {"stem": stem, "when": when, "state": state, "copied": copied, "kept": kept, "deleted_video": False,
@@ -755,6 +759,10 @@ def run(args):
         print(f"{reply['stem']}: {reply['words']}\n{reply['message']}")
     elif args.bring:
         print(import_results(args.bring)["message"])
+        for thread in _crop_threads:
+            if thread.is_alive():
+                print("Bringing the player pictures too...", flush=True)
+            thread.join()
     elif args.poll:
         did = poll_once()
         print("\n".join(did) if did else "Nothing to bring back.")
