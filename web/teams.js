@@ -26,6 +26,7 @@ async function load() {
     byId('cards').replaceChildren(el('div', { class: 'callout callout-red' }, problem.message));
     return;
   }
+  drawMap(reply);
   drawCards(reply);
   drawCompare(reply);
   filterCards(document.getElementById('site-search') ? document.getElementById('site-search').value.trim() : '');
@@ -36,6 +37,50 @@ function switchView(wanted) {
   adding = false;
   history.replaceState(null, '', withParams('teams.html', { view: view === 'opponents' ? '' : view }));
   load();
+}
+
+/* ---- the map: home as a star, each opponent as a dot in its colour ---- */
+
+let map = null, markers = null;
+
+function drawMap(reply) {
+  const card = byId('map-card'), note = byId('map-note');
+  if (view === 'ours') { card.hidden = true; return; }
+  card.hidden = false;
+  if (typeof L === 'undefined') {
+    note.textContent = 'The map needs the internet (it could not be loaded).';
+    byId('map').replaceChildren(el('div', { class: 'hint', style: 'padding: 20px' }, 'No map without the internet. The teams are still listed below.'));
+    return;
+  }
+  const placed = reply.cards.filter(function (c) { return c.lat !== null && c.lon !== null && c.lat !== undefined; });
+  const home = reply.home && reply.home.lat !== null ? reply.home : null;
+  if (!map) {
+    map = L.map('map', { scrollWheelZoom: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  }
+  if (markers) markers.remove();
+  markers = L.layerGroup().addTo(map);
+  const points = [];
+  if (home) {
+    const star = L.marker([home.lat, home.lon], { icon: L.divIcon({ className: '', html: '<span class="home-pin">★</span>', iconSize: [26, 26], iconAnchor: [13, 13] }), title: 'Home' });
+    star.bindPopup('<div class="map-popup"><div class="name">Home</div><div class="small">' + esc(home.place || '') + '</div></div>');
+    star.addTo(markers);
+    points.push([home.lat, home.lon]);
+  }
+  placed.forEach(function (c) {
+    const pin = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: '', html: '<span class="team-pin" style="display:block;background:' + c.colour + '"></span>', iconSize: [16, 16], iconAnchor: [8, 8] }), title: c.name });
+    const versus = c.versus && c.versus.played ? 'We are ' + c.versus.record.text + ' against them' : 'Not played yet';
+    const theirs = c.info && c.info.record ? ' · their record ' + esc(c.info.record) : '';
+    pin.bindPopup('<div class="map-popup"><div class="name">' + esc(c.name) + '</div><div class="small">' + esc(c.place || '') + '</div>' +
+                  '<div>' + versus + theirs + '</div><a href="' + withTeam('team.html', c.id) + '">Open the team →</a></div>');
+    pin.addTo(markers);
+    points.push([c.lat, c.lon]);
+  });
+  if (points.length) map.fitBounds(points, { padding: [30, 30], maxZoom: 11 });
+  else map.setView([35.8, -78.8], 8);
+  const missing = reply.cards.length - placed.length;
+  note.textContent = placed.length + ' of ' + reply.cards.length + ' on the map' + (missing ? ' · ' + missing + ' without a place yet (open the team and type its town)' : '');
+  setTimeout(function () { map.invalidateSize(); }, 50);
 }
 
 /* ---- the cards ---- */
@@ -56,7 +101,8 @@ function shareWords(top) {
 function teamCard(card) {
   const ours = view === 'ours';
   const href = card.link === 'season' ? withSeason('season.html', card.id) : withTeam('team.html', card.id);
-  const games = card.games ? plural(card.games, 'game') + ' · we are ' + card.record.text : 'No games yet';
+  const games = card.games ? plural(card.games, 'game') + ' on video' + (card.versus ? ' · ' + plural(card.versus.games_count, 'game') + ' scheduled' : '')
+    : (card.versus && card.versus.games_count ? plural(card.versus.games_count, 'game') + ' on the schedule, none on video' : 'No games yet');
   const mix = card.defense_mix, total = mix.zone + mix.man + mix.press;
   const bar = el('div', { class: 'split-bar', 'aria-hidden': 'true' });
   [[mix.zone, 'var(--blue)'], [mix.man, 'var(--blue-soft)'], [mix.press, 'var(--blue-pale)']].forEach(function (part) {
@@ -67,6 +113,9 @@ function teamCard(card) {
       el('span', { class: 'team-badge', style: 'background: ' + card.colour }, card.short || '?'),
       el('div', {}, [el('div', { class: 'team-name' }, card.name), el('div', { class: 'team-sub' }, games)])]),
     el('div', { class: 'fact-list' }, [
+      ours ? null : fact('Record against them', card.versus && card.versus.played ? card.versus.record.text + ' in ' + plural(card.versus.played, 'game') : 'Not played yet'),
+      ours ? null : fact('Their record', card.info && card.info.record ? card.info.record : '—'),
+      ours ? null : fact('Where', card.place || '—'),
       fact('Main defense', shareWords(card.main_defense)),
       fact('Main offense', shareWords(card.main_offense)),
       fact(ours ? 'We press after a made basket' : 'Presses after a made basket', card.press_share === null ? '—' : card.press_share + '%'),

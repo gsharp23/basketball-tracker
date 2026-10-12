@@ -10,7 +10,9 @@ Routes (beside dash_api's GET/POST /api/teams and PUT /api/teams/{id}, which the
         -> {"view", "season": {"id", "name"} or null, "cards": [CARD...],
             "compare": {"columns": [offense play types], "rows": [{"id", "name", "cells": {type: {"share",
             "points_each"}}, "main_defense"}]}}
-        CARD: {"id", "name", "short", "colour", "link" ("team" or "season"), "games", "record" ({wins, losses,
+        CARD (an opponent also has "place", "lat", "lon", "links", "info" and "versus": library.head_to_head without
+        its rows, the record over every season's schedule; the reply also has "home", our gym's place for the map):
+              {"id", "name", "short", "colour", "link" ("team" or "season"), "games", "record" ({wins, losses,
         ties, text}), "labelled" (possessions with an offense label), "main_defense" / "main_offense"
         ({"label", "share"} or null), "press_share" (% of made baskets followed by a press, or null),
         "points_per_game" (theirs against us; ours for "ours"), "defense_mix" ({"zone", "man", "press"}
@@ -142,7 +144,9 @@ def opponent_cards(season_id):
         if season_id is not None and not rows:
             continue                                  # not played this season
         identity = {"id": team_id, "name": team["name"], "short": team["short"], "colour": team["colour"], "link": "team"}
-        cards.append(card(identity, rows, "them"))
+        versus = library.head_to_head(team_id)
+        cards.append(dict(card(identity, rows, "them"), place=team["place"], lat=team["lat"], lon=team["lon"],
+                          links=team["links"], info=team["info"], versus=dict(versus, rows=None)))
     return cards
 
 
@@ -174,7 +178,7 @@ def teams_library(view: str = "opponents"):
             season = {"id": season_id, "name": library.load_seasons()["seasons"][season_id]["name"]} if season_id else None
     except library.Problem as error:
         raise HTTPException(400, str(error))
-    return {"view": view, "season": season, "cards": cards, "compare": compare_table(cards)}
+    return {"view": view, "season": season, "cards": cards, "compare": compare_table(cards), "home": library.load_teams()["home"]}
 
 
 def playlists(rows, label_key):

@@ -26,7 +26,10 @@ Routes in this module (all under /api)
     POST /api/seasons/{id}/schedule/import          {"rows": [fixture fields...]} -> {"added", "skipped"}
     GET  /api/teams                  {"teams": [{"id", "name", "short", "colour", "notes", "games"}]}
     POST /api/teams                  body {"name", "short"?, "colour"?} -> {"id", ...team}
-    PUT  /api/teams/{id}             body: any of name, short, colour, notes {number: text; "" removes}
+    PUT  /api/teams/{id}             body: any of name, short, colour, notes {number: text; "" removes}, place, lat, lon,
+                                     links [{label, url}], info {record, points_for, points_against, coach, level, source},
+                                     roster {number: name}
+    PUT  /api/teams/home             {"place", "lat", "lon"}: where our own gym is (the map's home marker)
     GET  /api/play-types             {"offense": [...], "defense": [...]}
     PUT  /api/play-types             the same shape; checked and saved to data/_dashboard/play_types.json
     GET  /api/settings               the settings (dash_common.DEFAULT_SETTINGS for the keys) plus "court_sizes",
@@ -353,9 +356,10 @@ def import_schedule(season_id: str, body: dict):
 
 def teams_reply():
     counts = games_per("opponent_id")
-    listed = [dict(row, id=key, games=counts.get(key, 0)) for key, row in library.load_teams()["teams"].items()]
+    data = library.load_teams()
+    listed = [dict(row, id=key, games=counts.get(key, 0)) for key, row in data["teams"].items()]
     listed.sort(key=lambda row: row["name"].lower())
-    return {"teams": listed}
+    return {"teams": listed, "home": data["home"]}
 
 
 @router.get("/teams")
@@ -373,6 +377,15 @@ def new_team(body: dict):
     except library.Problem as error:
         raise problem(error)
     return dict(row, id=team_id)
+
+
+@router.put("/teams/home")
+def change_home(body: dict):
+    """Where our own gym is, for the map: {"place", "lat", "lon"}."""
+    try:
+        return library.set_home_location(body if isinstance(body, dict) else {})
+    except library.Problem as error:
+        raise problem(error)
 
 
 @router.put("/teams/{team_id}")

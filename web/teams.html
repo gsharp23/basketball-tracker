@@ -7,8 +7,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
 <style>
-  /* this page only: the small team badge on a card */
+  /* this page only: the map and the small team badge on a card */
+  #map { height: 440px; border-radius: 10px; background: var(--bg); }
+  .map-popup .name { font-weight: 800; font-size: 15px; }
+  .map-popup .small { color: var(--muted); }
+  .home-pin { font-size: 26px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  .team-pin { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
   .team-head { display: flex; align-items: center; gap: 12px; }
   .team-badge { width: 44px; height: 44px; border-radius: 10px; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex: none; }
   .team-name { font-weight: 800; font-size: 20px; }
@@ -34,6 +40,15 @@
     </div>
   </div>
 
+  <section class="card" id="map-card">
+    <div class="card-head">
+      <h2 class="card-title">Where they are</h2>
+      <span class="card-note" id="map-note"></span>
+    </div>
+    <div id="map" role="img" aria-label="A map of the schools we play"></div>
+    <div class="hint">Home is the star. Click a marker to open the team. The map and the places come from OpenStreetMap, the one part of this screen that needs the internet.</div>
+  </section>
+
   <div class="grid-cards-small" id="cards"><div class="hint">Reading the teams...</div></div>
 
   <section class="card" id="compare">
@@ -45,6 +60,7 @@
   </section>
 </main>
 <script src="app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
 <script src="teams.js"></script>
 </body>
 </html>

@@ -20,7 +20,13 @@ The files (all under data/, never in git)
         then on the game's game_info.json and the fixture are kept the same (date, opponent, home, scores).
     data/_library/teams.json
         {"teams": {"<id>": {"name": "Riverside", "short": "RIV", "colour": "#1d5fbf",
-                            "notes": {"10": "Goes left"}}}}       the opponents; our own team is not a row
+                            "notes": {"10": "Goes left"},
+                            "place": "Riverside, NC", "lat": 35.8, "lon": -78.6,      (for the map; typed or looked up)
+                            "links": [{"label": "MaxPreps", "url": "https://..."}],
+                            "info": {"record": "12-4", "points_for": "48", "points_against": "39", "coach": "",
+                                     "level": "", "source": "", "updated": "2026-10-12"},   (typed or pasted by the coach)
+                            "roster": {"5": "Name"}}},            their players by number, kept on this laptop
+         "home": {"place": "<our town>", "lat": null, "lon": null}}     the opponents; our own team is not a row
     data/<stem>/game_info.json      what the coach said about one game (INFO_DEFAULTS lists every key)
         "season_id" (None = Unassigned), "opponent_id", "opponent" (the name, kept for display), "date",
         "home" (True/False/None), "our_team" (the detected colour group that is us: "<colour>"/None),
@@ -288,18 +294,67 @@ def roster_for(season_id):
 
 # ---------------------------------------------------------------- teams (the opponents)
 
+TEAM_INFO_KEYS = ("record", "points_for", "points_against", "coach", "level", "source", "updated")
+
+
+def clean_number(value):
+    """A latitude or longitude as a float, or None."""
+    try:
+        return float(value) if value is not None and str(value).strip() != "" else None
+    except (TypeError, ValueError):
+        return None
+
+
+def clean_links(saved):
+    links = saved if isinstance(saved, list) else []
+    clean = []
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        url, label = str(link.get("url") or "").strip()[:300], str(link.get("label") or "").strip()[:40]
+        if url:
+            clean.append({"label": label or "Link", "url": url})
+    return clean
+
+
 def clean_team(saved):
     saved = saved if isinstance(saved, dict) else {}
     notes = saved.get("notes") if isinstance(saved.get("notes"), dict) else {}
+    info = saved.get("info") if isinstance(saved.get("info"), dict) else {}
+    roster = saved.get("roster") if isinstance(saved.get("roster"), dict) else {}
     return {"name": str(saved.get("name") or "").strip() or "Team", "short": str(saved.get("short") or "")[:3].upper(),
             "colour": str(saved.get("colour") or TEAM_COLOURS[0]),
-            "notes": {str(number): str(text) for number, text in notes.items()}}
+            "notes": {str(number): str(text) for number, text in notes.items()},
+            "place": str(saved.get("place") or "")[:120], "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon")),
+            "links": clean_links(saved.get("links")),
+            "info": {key: str(info.get(key) or "")[:200] for key in TEAM_INFO_KEYS},
+            "roster": {str(number): str(name) for number, name in roster.items()}}
+
+
+def clean_home(saved):
+    saved = saved if isinstance(saved, dict) else {}
+    return {"place": str(saved.get("place") or "")[:120], "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon"))}
 
 
 def load_teams():
+    """teams.json as {"teams": {id: team}, "home": {"place", "lat", "lon"}} (home: where our own gym is, for the map)."""
     data = read_file(library_dir() / "teams.json", {})
-    teams = data.get("teams") if isinstance(data, dict) and isinstance(data.get("teams"), dict) else {}
-    return {"teams": {str(key): clean_team(row) for key, row in teams.items()}}
+    data = data if isinstance(data, dict) else {}
+    teams = data.get("teams") if isinstance(data.get("teams"), dict) else {}
+    return {"teams": {str(key): clean_team(row) for key, row in teams.items()}, "home": clean_home(data.get("home"))}
+
+
+def set_home_location(changes):
+    """Where our own gym is (the map's home marker): any of place, lat, lon. Returns the home record."""
+    data = load_teams()
+    changes = changes if isinstance(changes, dict) else {}
+    if "place" in changes:
+        data["home"]["place"] = str(changes["place"] or "").strip()[:120]
+    for key in ("lat", "lon"):
+        if key in changes:
+            data["home"][key] = clean_number(changes[key])
+    save_teams(data)
+    return data["home"]
 
 
 def save_teams(data):
@@ -337,8 +392,8 @@ def create_team(name, short=None, colour=None):
         raise Problem(f"There is already a team called {name}.")
     data = load_teams()
     team_id = new_id(name, data["teams"])
-    row = {"name": name, "short": (str(short or "").strip()[:3].upper() or short_name(name)),
-           "colour": check_colour(colour, TEAM_COLOURS[len(data["teams"]) % len(TEAM_COLOURS)]), "notes": {}}
+    row = clean_team({"name": name, "short": (str(short or "").strip()[:3].upper() or short_name(name)),
+                      "colour": check_colour(colour, TEAM_COLOURS[len(data["teams"]) % len(TEAM_COLOURS)])})
     data["teams"][team_id] = row
     save_teams(data)
     return team_id, row
@@ -352,7 +407,9 @@ def team_or_create(name):
 
 
 def update_team(team_id, changes):
-    """Change a team's name, short, colour or notes ({number: text}; an empty text removes the note)."""
+    """Change a team: name, short, colour, notes ({number: text}; an empty text removes the note), place, lat, lon,
+    links ([{label, url}], the whole list), info ({record, points_for, points_against, coach, level, source}: what the
+    coach typed or pasted about them; "updated" is set to today), roster ({number: name}, the whole list)."""
     data = load_teams()
     if team_id not in data["teams"]:
         raise Problem("There is no team with that id any more. Reload the page.")
@@ -376,6 +433,24 @@ def update_team(team_id, changes):
                 row["notes"][str(number)] = text
             else:
                 row["notes"].pop(str(number), None)
+    if "place" in changes:
+        row["place"] = str(changes["place"] or "").strip()[:120]
+    for key in ("lat", "lon"):
+        if key in changes:
+            row[key] = clean_number(changes[key])
+    if "links" in changes:
+        links = clean_links(changes["links"])
+        for link in links:
+            if not re.match(r"https?://", link["url"], re.I):
+                raise Problem(f"A link has to start with http:// or https:// ({link['url'][:40]}).")
+        row["links"] = links
+    if "info" in changes and isinstance(changes["info"], dict):
+        for key in TEAM_INFO_KEYS:
+            if key in changes["info"]:
+                row["info"][key] = str(changes["info"][key] or "").strip()[:200]
+        row["info"]["updated"] = today().isoformat()
+    if "roster" in changes:
+        row["roster"] = check_roster({"players": changes["roster"]})["players"]
     save_teams(data)
     return row
 
@@ -1153,6 +1228,27 @@ def season_summary(season_id):
 
 # ---------------------------------------------------------------- one team (an opponent)
 
+def games_vs(team_id):
+    """Every scheduled game against a team over all seasons, oldest first, each schedule row plus "season_id"
+    and "season_name" (a video on no fixture counts too)."""
+    found = []
+    for season_id, season in load_seasons()["seasons"].items():
+        for row in schedule_rows(season_id):
+            if row["opponent_id"] == team_id:
+                found.append(dict(row, season_id=season_id, season_name=season["name"]))
+    found.sort(key=lambda row: (row["date"] or "9999", row["time"]))
+    return found
+
+
+def head_to_head(team_id):
+    """{"games_count", "record", "points_per_game", "allowed_per_game", "played", "upcoming", "rows"} over the schedules."""
+    rows = games_vs(team_id)
+    played = [row for row in rows if row["result"]]
+    return {"games_count": len(rows), "record": record_of(rows), "played": len(played),
+            "upcoming": sum(1 for row in rows if not row["result"] and row["date"] >= today().isoformat()),
+            "points_per_game": per_game(rows, "points_us"), "allowed_per_game": per_game(rows, "points_them"), "rows": rows}
+
+
 def play_shares(pairs, side):
     """How possessions split by play type: [{"label", "count", "share", "points_each", "fg_pct", "turnover_pct"}].
 
@@ -1228,6 +1324,7 @@ def team_summary(team_id):
      "defense": play_shares of OUR possessions by the defense they played (our points per possession, our turnovers),
      "press": {"pressed", "baskets", "share"} (how often they pressed after a made basket),
      "shots": {"count", "marks", "court"} (their tagged shots, folded), "players": their_players,
+     "head_to_head": head_to_head() over every season's schedule (videos or not), "home": where our gym is,
      "provisional": True when any game's court was marked with stand-in clicks}
     """
     teams = load_teams()["teams"]
@@ -1257,6 +1354,7 @@ def team_summary(team_id):
             "shots": {"count": len(their_shots), "marks": marks,
                       "court": court_of(rows[0]["stem"]) if rows else {"length_ft": config.COURT_LENGTH_FT, "width_ft": config.COURT_WIDTH_FT}},
             "players": their_players(team_id, rows, team["notes"]),
+            "head_to_head": head_to_head(team_id), "home": load_teams()["home"],
             "provisional": any(row["stand_in_court"] for row in rows)}
 
 
