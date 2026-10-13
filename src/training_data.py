@@ -240,6 +240,25 @@ def save_job_labels(labels):
         save_labels(current)
 
 
+def save_player_boxes(labels):
+    """The players-only assist's save: only the Player boxes it added are written, onto the current file's copy
+    of each picture (so nothing the coach did meanwhile is lost), and those pictures go back in the queue."""
+    with labels_lock():
+        current = load_labels()
+        for key, record in labels["frames"].items():
+            theirs = current["frames"].get(key)
+            if theirs is None or not record.get("players_added"):
+                continue
+            if any(box["cls"] == "Player" for box in theirs["boxes"]):
+                continue                             # the coach drew players meanwhile: theirs stand
+            theirs["boxes"] = theirs["boxes"] + [box for box in record["boxes"]
+                                                 if box["cls"] == "Player" and box.get("source") == "model"]
+            theirs["status"] = "unchecked"
+            theirs["players_added"] = True
+            theirs["queue_reason"] = queue_reason(theirs)
+        save_labels(current)
+
+
 def migrate_v2(old):
     """v2's ball-only labels -> v3 records.
 
@@ -708,11 +727,15 @@ def run_job(videos, how_many, assist, assist_only, players_only=False):
             print(f"  loading the detector {name} (one model at a time on this laptop)", flush=True)
             lock = heavy_lock()
             detector = Detector(name)
+            keep = save_player_boxes if players_only else save_job_labels
             for progress in label_assist(detector, labels, game, frames, players_only):
                 print(f"  {progress['done']} of {progress['total']} pictures looked at | {nice_time(progress['seconds_left'])}", flush=True)
                 if progress["done"] % 25 == 0:
-                    save_job_labels(labels)     # a stopped job keeps the boxes drawn so far
-            save_job_labels(labels)
+                    keep(labels)                # a stopped job keeps the boxes drawn so far
+            keep(labels)
+            if players_only:
+                added = sum(1 for record in labels["frames"].values() if record["game"] == game and record.get("players_added"))
+                print(f"  players added to {added} pictures: they are back in the queue on the Annotate screen to confirm", flush=True)
             del detector
             lock.close()
     print("=== All stages are done")
