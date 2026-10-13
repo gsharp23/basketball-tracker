@@ -168,7 +168,7 @@ function whoCell(row) {
     : el('span', { class: 'muted' }, row.stem ? 'no opponent yet · ' + row.stem : 'no opponent yet');
   const extra = [];
   if (row.kind === 'tournament') extra.push(el('span', { class: 'chip chip-grey chip-sm' }, 'Tournament'));
-  if (row.unscheduled) extra.push(el('span', { class: 'small muted' }, ' video on no scheduled game'));
+  if (row.unscheduled) extra.push(el('span', { class: 'small muted under' }, 'video on no scheduled game'));
   return el('td', { class: 'strong' }, [name].concat(extra));
 }
 
