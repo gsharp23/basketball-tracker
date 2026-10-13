@@ -378,6 +378,11 @@ def build_version(augmentations=None):
         raise ValueError(f"Too few checked pictures to fill the \"{empty[0]}\" part. Check more pictures first.")
     if not any(box.get("cls") in classes for entry in parts["train"] for box in entry["boxes"]):
         raise ValueError("None of the training pictures has a box in it. Draw boxes on some pictures first.")
+    if "Player" in classes and not any(box.get("cls") == "Player" for entry in checked for box in entry["boxes"]):
+        raise ValueError("No checked picture has a player box. Game pictures are full of players, so a model trained "
+                         "from these would learn that players are background and stop finding them. On the Upload "
+                         "screen press \"Run label assist\": the detector adds the players, you confirm each picture "
+                         "with one press on the Annotate screen, and then build the version.")
 
     number = plan["number"]
     folder = versions_dir() / f"v{number}"

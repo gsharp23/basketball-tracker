@@ -381,6 +381,10 @@ def send(body: dict):
     version = next((info for info in tv.list_versions() if info["number"] == number and info["has_zip"]), None)
     if version is None:
         raise HTTPException(400, f"Version {number} has no zip. Build it on the Dataset screen first.")
+    counts = (version.get("counts") or {}).get("boxes") or {}
+    if "Player" in counts and not counts["Player"]:
+        raise HTTPException(400, f"Version {number} has no player boxes, so a model trained from it would stop finding "
+                                 "players. Run label assist on the Upload screen, confirm the pictures, build a new version.")
     base = str(body.get("base") or "fresh")
     if base != "fresh":
         base = model_or_400(base)

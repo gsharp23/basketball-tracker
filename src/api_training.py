@@ -72,8 +72,8 @@ def picture_url(game, frame):
 
 
 def reason_words(reason):
-    return {"model unsure": "Model unsure", "dim": "Dim gym", "blur": "Blurred, fast play",
-            "small ball": "Small ball (zoomed out)"}.get(reason, "In order")
+    return {"players added": "Players added by the model: confirm them", "model unsure": "Model unsure", "dim": "Dim gym",
+            "blur": "Blurred, fast play", "small ball": "Small ball (zoomed out)"}.get(reason, "In order")
 
 
 def short_record(record):
@@ -252,9 +252,13 @@ def assist(body: dict):
     if not video:
         raise HTTPException(400, "That game is not in the clips folder any more.")
     labels = plainly(td.load_labels)
-    if not td.frames_without_assist(labels, game):
-        raise HTTPException(400, "Every picture of this game has its first boxes already.")
-    return {"name": start_pick([video], ["--assist-only"]), "job": job_state()}
+    if td.frames_without_assist(labels, game):
+        return {"name": start_pick([video], ["--assist-only"]), "job": job_state(), "players_only": False}
+    # Every unchecked picture has its boxes; but pictures checked with no player box at all (label assist was
+    # skipped, the coach drew only the ball) would teach the detector that players are background.
+    if td.frames_without_players(labels, game):
+        return {"name": start_pick([video], ["--assist-only", "--players-only"]), "job": job_state(), "players_only": True}
+    raise HTTPException(400, "Every picture of this game has its first boxes already.")
 
 
 @router.put("/test-game")

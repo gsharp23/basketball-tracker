@@ -51,7 +51,7 @@ CLASSES = ["Ball", "Referee", "Player", "Hoop"]
 # The detector's own class names -> the project's (its other classes, Clock, Overlay, Scoreboard, are dropped).
 DETECTOR_NAMES = {"Player": "Player", "Ref": "Referee", "Referee": "Referee", "Hoop": "Hoop", "Ball": "Ball"}
 STATUSES = ("unchecked", "checked", "skipped")
-QUEUE_REASONS = ("model unsure", "dim", "blur", "small ball")      # hardest first
+QUEUE_REASONS = ("players added", "model unsure", "dim", "blur", "small ball")      # first in the queue first
 
 DEFAULT_FRAMES = 150            # pictures to pick per game
 MIN_SECONDS_APART = 0.5         # two picked pictures are never closer in time than this
@@ -304,6 +304,7 @@ def set_answer(labels, game, frame, status, boxes, classes=None):
         raise Problem("The answer must be checked, unchecked or skipped.")
     record["boxes"] = check_boxes(boxes, record["size"], classes or load_project()["classes"])
     record["status"] = status
+    record.pop("players_added", None)           # confirmed (or redone) by the coach
     record["queue_reason"] = queue_reason(record)
     return record
 
@@ -342,6 +343,8 @@ def queue_reason(record):
     """Why a picture is shown early in the hard-pictures queue ("" when it is an ordinary one)."""
     width = record["size"][0] or 1
     model_boxes = [box for box in record["boxes"] if box.get("source") == "model"]
+    if record.get("players_added"):
+        return "players added"
     if any((box.get("conf") or 0) < SURE_CONF for box in model_boxes):
         return "model unsure"
     if record["conditions"].get("light") == "dim":
@@ -523,12 +526,25 @@ def frames_without_assist(labels, game):
             and not any(box.get("source") == "model" for box in record["boxes"])]
 
 
-def label_assist(detector, labels, game, frames):
+def frames_without_players(labels, game):
+    """Frame numbers of a game's pictures (checked or not) with no Player box at all.
+
+    A picture checked without any player box teaches the detector that players are background, which
+    happens when label assist was skipped and the coach drew only the ball. The players-only assist adds
+    the detector's Player boxes to these and queues them to be confirmed."""
+    return [record["frame"] for key, record in labels["frames"].items()
+            if record["game"] == game and record["status"] != "skipped"
+            and not any(box["cls"] == "Player" for box in record["boxes"])]
+
+
+def label_assist(detector, labels, game, frames, players_only=False):
     """Run the detector on the given pictures of a game and keep its boxes as "model" boxes.
 
     Model boxes already on a picture are replaced; the coach's own boxes stay. When the game was not
     processed, the zoom condition is worked out here from the detector's Player boxes. A generator:
     yields {"done", "total", "seconds_left"} after every picture. The caller saves `labels`.
+    players_only: add only the detector's Player boxes, keep everything else as it is, and put the picture
+    back in the queue ("players added") so the coach confirms them with one press.
     """
     progress = {"done": 0, "total": len(frames), "seconds_left": None}
     yield dict(progress)
@@ -539,7 +555,14 @@ def label_assist(detector, labels, game, frames):
         picture = cv2.imread(str(frame_path(game, frame)))
         if record is not None and picture is not None:
             found = detector.boxes(picture)
-            record["boxes"] = [box for box in record["boxes"] if box.get("source") != "model"] + found
+            if players_only:
+                players = [box for box in found if box["cls"] == "Player"]
+                if players:
+                    record["boxes"] = record["boxes"] + players
+                    record["status"] = "unchecked"
+                    record["players_added"] = True
+            else:
+                record["boxes"] = [box for box in record["boxes"] if box.get("source") != "model"] + found
             if not tracked:
                 heights = [box["h"] for box in found if box["cls"] == "Player"]
                 record["conditions"]["zoom"] = zoom_of(heights, picture.shape[0])
@@ -647,8 +670,9 @@ def print_status():
     print("  labels on the checked pictures: " + ", ".join(f"{name} {count}" for name, count in boxes.items()))
 
 
-def run_job(videos, how_many, assist, assist_only):
-    """Pictures from each video, then label assist on the new ones. Prints progress lines the dashboard reads."""
+def run_job(videos, how_many, assist, assist_only, players_only=False):
+    """Pictures from each video, then label assist on the new ones. Prints progress lines the dashboard reads.
+    players_only: no pictures are taken; the detector adds Player boxes to the pictures that have none."""
     for video in videos:
         config.require_video(video)
     labels = load_labels()
@@ -674,16 +698,17 @@ def run_job(videos, how_many, assist, assist_only):
                 print(f"  NOTE: the video is too short for {how_many} pictures this far apart; {game} has {len(frame_files(game))}.")
         if assist:
             stage += 1
-            print(f"=== Stage {stage} of {stages}: assist on {game}", flush=True)
-            frames = frames_without_assist(labels, game)
+            print(f"=== Stage {stage} of {stages}: assist on {game}" + (" (players only)" if players_only else ""), flush=True)
+            frames = frames_without_players(labels, game) if players_only else frames_without_assist(labels, game)
             if not frames:
-                print("  every picture has its first boxes already - skipped")
+                print("  every picture has a player box already - skipped" if players_only
+                      else "  every picture has its first boxes already - skipped")
                 continue
             name = detector_name()
             print(f"  loading the detector {name} (one model at a time on this laptop)", flush=True)
             lock = heavy_lock()
             detector = Detector(name)
-            for progress in label_assist(detector, labels, game, frames):
+            for progress in label_assist(detector, labels, game, frames, players_only):
                 print(f"  {progress['done']} of {progress['total']} pictures looked at | {nice_time(progress['seconds_left'])}", flush=True)
                 if progress["done"] % 25 == 0:
                     save_job_labels(labels)     # a stopped job keeps the boxes drawn so far
@@ -701,6 +726,8 @@ def parse_args():
                         help=f"how many pictures to have per game in total (default {DEFAULT_FRAMES})")
     parser.add_argument("--no-assist", action="store_true", help="do not run the detector on the new pictures")
     parser.add_argument("--assist-only", action="store_true", help="only run the detector on pictures that have no model boxes yet")
+    parser.add_argument("--players-only", action="store_true",
+                        help="add the detector's Player boxes to the pictures that have none (checked ones too) and queue them to confirm")
     parser.add_argument("--status", action="store_true", help="how many pictures and labels there are")
     parser.add_argument("--migrate", action="store_true", help="turn a v2 labels.json into the v3 shape")
     return parser.parse_args()
@@ -715,7 +742,8 @@ def main():
             load_labels()               # reading a v2 file converts and saves it
             print_status()
         elif args.video:
-            run_job([args.video] + args.more, args.frames, assist=not args.no_assist, assist_only=args.assist_only)
+            run_job([args.video] + args.more, args.frames, assist=not args.no_assist,
+                    assist_only=args.assist_only or args.players_only, players_only=args.players_only)
         else:
             sys.exit("Say what to do: --video clips/<game>.mp4, --status or --migrate.")
     except Problem as problem:
