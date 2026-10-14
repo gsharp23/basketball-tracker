@@ -92,11 +92,21 @@ def connection():
                 "message": "Google Drive is not connected: no Drive folder is set. On the Settings page, type where "
                            "Google Drive for desktop keeps the Hoops Tracker folder on this computer."}
     windows = main.windows_path(root)
+    stale = False
     try:
         there = root.is_dir()
-    except OSError:
-        there = False
+    except OSError as why:
+        # "No such device": the Linux side's link to the Windows drive letter died when Google Drive for
+        # desktop restarted. Mounting again needs the coach's password, so the message says how.
+        there, stale = False, getattr(why, "errno", None) == 19
     if not there:
+        if stale and len(root.parts) >= 3 and root.parts[1] == "mnt" and len(root.parts[2]) == 1:
+            letter, mount_point = root.parts[2].upper(), f"/mnt/{root.parts[2]}"
+            return {"connected": False, "folder": str(root), "windows_path": windows,
+                    "message": f"Google Drive is there, but this computer's Linux side lost its link to the {letter}: drive "
+                               "(Google Drive for desktop restarted). In the Ubuntu terminal run:  "
+                               f"sudo umount -l {mount_point} && sudo mount -t drvfs {letter}: {mount_point}  "
+                               "(it asks for your password), then press the button again."}
         return {"connected": False, "folder": str(root), "windows_path": windows,
                 "message": f"Google Drive is not connected: the folder {windows} cannot be found. "
                            "Is Google Drive for desktop running?"}
