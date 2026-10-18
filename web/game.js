@@ -893,9 +893,10 @@ async function loadCourt() {
   if (court.open_page) courtOpened = true;
   byId('court-folded').hidden = !court.ready || courtOpened;
   byId('court-body').hidden = court.ready && !courtOpened;
-  byId('court-folded-words').textContent = court.stand_in_court
+  byId('court-folded-words').textContent = (court.stand_in_court
     ? 'Court marked with stand-in clicks: every position is provisional until you do step 2 yourself.'
-    : 'Court marked. Every position-based number uses it.';
+    : 'Court marked. Every position-based number uses it.')
+    + (court.ignored !== null && court.ignored !== undefined ? ' Ignored ' + court.ignored.toLocaleString() + ' detections outside the court.' : '');
   byId('court-provisional').hidden = !court.stand_in_court;
   const holder = byId('court-steps');
   holder.replaceChildren();

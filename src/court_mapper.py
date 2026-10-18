@@ -723,7 +723,11 @@ def run(video=config.DEFAULT_VIDEO, resume=False):
                              "middle": minutes_seconds((first + last) / 2 / fps)}
                             for first, last, count in unmapped_stretches(records)[:3]]}
     save_frames_file(video, court, records, complete=True, summary=summary)
-    positions = write_positions(video)          # reads the file just saved
+    # Now that the floor is known in each frame: the people off the court (bench, table, stands) are moved out of
+    # the way in tracks.json, so the teams, the numbers, the positions and the stats only ever see the players.
+    import court_filter
+    summary["off_court"] = court_filter.apply(video)
+    positions = write_positions(video)          # reads the files just saved
     feet = [player for frame in positions["frames"] for player in frame["players"]]
     on_court = sum(court_model.on_court(player["x"], player["y"], court[0], court[1]) for player in feet)
     summary["foot_points"] = len(feet)

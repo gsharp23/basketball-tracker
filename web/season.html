@@ -32,8 +32,23 @@
       <button class="btn btn-outline" id="make-current" type="button" hidden>Make this the current season</button>
       <button class="btn btn-red" id="add-fixture" type="button">Add a game</button>
       <button class="btn btn-outline" id="open-roster" type="button">Roster</button>
+      <button class="btn btn-outline" id="open-export" type="button">Export for the web</button>
     </div>
   </div>
+
+  <!-- Export for the web: a read-only copy of the stats pages, for GitHub Pages -->
+  <section class="card" id="export-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title">Export for the web</h2>
+      <button class="btn btn-light btn-sm" id="export-close" type="button">Close</button>
+    </div>
+    <div class="note">Writes a folder with read-only copies of the Season, Teams and Players pages and the numbers behind them, as a plain website that works on GitHub Pages with no server. No videos, no pictures of players, no edit buttons. The folder's README has the three commands to publish it.</div>
+    <label class="check check-box"><input type="checkbox" id="export-first-names" checked>Use first names and numbers only (surnames are left out of everything in the copy)</label>
+    <div class="row">
+      <button class="btn btn-red" id="export-go" type="button">Export</button>
+      <span class="hint" id="export-result"></span>
+    </div>
+  </section>
 
   <!-- "Add a game": a game on the schedule, with or without a video yet -->
   <section class="card" id="fixture-panel" hidden>

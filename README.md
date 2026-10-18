@@ -175,9 +175,13 @@ kept or shared between the screens.
 |---|---|
 | Season (`season.html`) | **The first screen of Game analysis**: the current season, with a dropdown to switch to an earlier one (or to "All seasons"). The five tiles (Record, Points per game, Allowed per game, Field goals, Threes), **Points by game** (us in red, the opponents in grey; a hollow dot is the points from the tagged shots standing in for a final score that has not been typed), the **season shot map** with the share of points from the paint, threes and free throws, the **schedule** (every game of the season in date order: date and tip-off, home or away, the opponent, the result, and the video's state when one is linked; a video that is on no scheduled game is listed too), the leaders. "Add a game" puts a game on the schedule: date, tip-off, opponent, home or away, kind, the score, and a video to link if there is one already; Edit on a row changes the same things or takes the game off the schedule. "Roster": jersey number and name per player of this season. A season that is not the current one can be made current |
 | Seasons (`seasons.html`) | "All seasons": one card per season (the record, games, points per game, a small line of the points by game, the last game); "New season" (name, first day, make it the current one, the roster); an "Unassigned" card when videos are in no season; the eight most recent games with their state. A season that is not current can be deleted here (its games become Unassigned) |
-| Games (`games.html`) | **In the processing area.** Every video in the clips folder, grouped by season: Date, Opponent, Result, a status chip, and what to do next: **Mark court** (until the court is marked), **Run on Colab** (the video and the court files go to the Drive folder; the confirmation says whether the court is marked), **Open** (results exist), **Progress** (a run is going), **Redo the stats** (after a roster change: seconds, on the laptop), Edit; **Import now** while Colab is done and the results have not come back yet. "Open Colab" at the top opens the processing notebook; a note on the screen gives the four steps of the flow. The box at the top filters the rows |
-| Players (`players.html`) | Season totals for every player on the roster: points and shots from the tagged shots, time on camera and distance from the processed games. Click a player for his season shot map, points by area and a game-by-game table |
-| Teams (`teams.html`) | **Where they are**: a map (OpenStreetMap through Leaflet; the one part of Game analysis that needs the internet) with home as a star and each opponent as a dot in its colour, a popup with the record against them and a link to the team. Then a card per opponent (Opponents: this season's; All seasons: everyone; Our team: one card per season for our own side) with the record against them over the schedules, their record as typed, where they are, main defense and offense, whether they press, points per game, the defense mix; "Add a team"; the compare table (share of possessions by offense type, points per possession) |
+| Games (`games.html`) | **In the Processing & training area.** Every game video, grouped by season ("this season" for the current one, "training footage" for an earlier one, "Test clips" last): Game, Date, Video (length · size), **Where it is** ("Step 2 of 5 · court not marked", "Step 3 of 5 · ready to send to Colab", "Step 4 of 5 · in Drive, waiting for you to press Run all · sent 10 min ago", "Done · results back 11 Oct"), then **Continue →** (Process a game with that game picked) or **Open stats →**, and Edit (name, date, video, squad, test clip). Chips: All / Needs something from me / Has results |
+| Dashboard (`dashboard.html`) | **The first screen of Processing & training.** Four tiles (the detector in use, games processed, pictures captured and confirmed, versions built), the detector score by version (a hollow dot until a version is scored), score by class, and two cards with one button each: **Process a game** (the game closest to done, its step, what blocks it, "Continue: ...") and **Improve the detector** (pictures confirmed, the next step, "Continue: ..."). The sidebar: Dashboard, Games, Process a game, Improve the detector, the old training screens under "Training (old)", and a DETECTOR IN USE box |
+| Process a game (`process.html`) | One game's five steps, top to bottom, one live button at a time: 1 Add the video (done), 2 Mark the court, 3 Send to Colab (locked until the court is marked; "Copying to Drive · 620 MB of 1.69 GB" while it copies), 4 Open Colab and press Run all (locked until the copy is done), 5 Results come back (nothing to press). The current step is outlined in yellow with YOU ARE HERE; a locked step says exactly what is missing |
+| Players (`players.html`) | Our players this season in two tables, **Black** and **Red** (a player on both squads is in both): games, points, per game, FG, 3PT, FT, time on camera, distance. A name opens the player's page. "Show unmatched numbers" lists the numbers the reader saw on our team that no roster player explains (see "Jersey numbers and the roster"); **Edit** on any row changes the name, number or squad, or marks a number as not a real player and merges its minutes and points into someone. "Roster" opens the season's roster |
+| Teams (`teams.html`) | **Where they are**: a map (OpenStreetMap through Leaflet) with home as a yellow pin and each opponent's gym as a dark one; a pin opens a card with the school, its address, the dates we play them (each a link) and a box for their MaxPreps link; opponents with no address are listed under "Home only". The map's tiles are fetched once through the dashboard and kept under `data/_dashboard/tiles/`, so the map works offline afterwards (the one outside contact of the server). **Black** and **Red** open the squad pages. Then a card per opponent (record against them over the schedules, their typed record, where they are, main defense and offense, whether they press, points per game, the defense mix); "Add a team"; the compare table |
+| Squad (`squad.html`) | Middle School Black or Red: the squad's schedule for the chosen season (a game with no squad shows for both) and its roster (players on that squad or on both) |
+| Player (`player.html`) | One of our players: season totals, the season shot map, where the points come from (paint, mid-range, three), the areas, and one line per game |
 | Team (`team.html`) | One opponent. **About them**: where they are, their record and points as typed or pasted, coach, level, the links to their pages (MaxPreps, the school site...) that open in a new tab, their roster, and when it was typed; **Edit** opens the form ("Find on the map" asks OpenStreetMap for the place typed; a pasted roster page is read line by line for the numbers and names). **Head to head**: the record, points for and against and the upcoming games over every season's schedule, videos or not. Then what they run on offense, how they defend us, where they score (their tagged shots), their players by jersey number with the coach's notes, the games against them on video, the scouting report (PDF) |
 | Game (`game.html`) | One game the way a video platform shows it. The **video** (the game file itself; the tool's check video `tracked.mp4`, which carries tracking IDs and the pipeline's "ball?" guesses, stands in only when the browser cannot play the game file) with the **possession timeline** under it: one block per labelled possession (red ours, grey theirs scored, pale a turnover; the tagged shots as dots when nothing is labelled yet), Q1–Q4 as equal parts of the video, "Only made shots" and "Only presses" play those clips one after another; a link such as `game.html?game=game1&playlist=fast-break` starts a playlist. The **live court** follows the video, one dot per player from `positions.json` (a moment with no position for anyone is a gap in that file, feet out of the picture or no court mapping there, and the panel under the court says so); click a dot to follow one player (speed now, nearest defender, sprints, distance). The tiles (points tagged, field goals, threes, free throws, turnovers), the **players table** (a number plays that player's shots), the **scoring heat map** (team or one shooter). The line under the title holds the small links that set the final score, "we wear" (which jersey colour group is us) and, for a game with no opponent yet, "Name the opponent". Below: the processing card while a run is going, and the **Court set-up** panel with the three click pages (with **Run on Colab** for a game that is on Colab, to send the court files) |
 | Tag shots and plays (`tag.html`) | **Shots**: play the video, pause at a shot, every tracked player gets a box; click the shooter (or type the team and number), 2 or 3 points or free throw is worked out from the position and can be changed, press MADE or MISSED. The list of shots, "Undo last", click a shot to change or delete it. **Plays**: "Add possession", Start and End take the video's time (keys S and E; Space plays and pauses), who had the ball, the offense run and the defense faced (the play types from Settings, editable in place), scored / missed / turnover, points (counted from the tagged shots unless typed), a note. See "Shots and the scoring heat map" |
@@ -1163,6 +1167,49 @@ names may reach GitHub.
   from scratch"), and they do not cover uploads made through the GitHub website.
 
 ---
+
+## Jersey numbers and the roster
+
+The reader sees digits from behind, half hidden, at an angle, so it reads 00 for 10, 22 for 2, 34 for 3 or 4,
+25 for 5. On our team, a number that is not on the season's roster is snapped to the roster player it is
+one slip away from (`src/roster_snap.py`: a doubled digit, all zeros for a 10, a digit too many), and the
+reader's other looks at that player decide between two candidates (34 is the 3 or the 4 by the votes);
+a number nothing explains is **unmatched**: it counts for nobody and shows only when asked for on the
+Players page. The snap happens when the laptop reads the numbers for the screens (Colab never has the
+roster), so it applies to every game at once and changes when the roster does. The coach's own word wins:
+**Edit** on the Players page merges a number into a player, or hides it as not a real player
+(`merges` in the season's roster).
+
+## Only the court is tracked
+
+Once the court stage knows where the floor is in a frame, every Player and Referee box whose feet land
+outside the court, with a margin of 3% of the court so a player on the sideline stays, is moved out of the
+frame's player list into its `off_court` list in `tracks.json` (`src/court_filter.py`, run at the end of the
+court stage). The teams, the numbers, the positions, the stats and shot tagging only read the player list,
+so a bench player, a coach or a parent never gets a jersey number, a team or a stat line. The ball is never
+touched. The game page's court panel says how many detections were ignored. Running the court stage again
+puts every box back first and judges afresh.
+
+## Export for the web
+
+"Export for the web" on the Season page writes a read-only copy of the Season, Teams and Players pages into
+the data drive's `export/` folder: the pages, their numbers as JSON files under `api/`, the logo, and a
+README with the three commands to publish it on GitHub Pages and how to update it. No videos, no pictures of
+players, no edit controls, no links to screens that are not in the copy. "Use first names and numbers only"
+leaves the surnames out of everything in it. Publishing is the coach's decision each time; the players are
+children, so the default is first names only.
+
+## When Google Drive is not there
+
+Every Drive action (Run on Colab, Import now, sending a dataset, bringing a model back) first checks the Drive
+link (one shared check in `web/app.js`). When the folder cannot be reached a card says so in plain words, with
+what to do and a "Try again" button; once the folder is back, the action that asked carries on by itself.
+
+## Running the tests
+
+    python -m unittest discover tests
+
+The tests cover the roster snap and the court filter.
 
 ## Keeping it safe
 

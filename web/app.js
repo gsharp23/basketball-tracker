@@ -5,8 +5,16 @@
 
 // Fetch JSON from the dashboard. A problem becomes an Error with a plain message
 // (the "detail" the API sent, or what went wrong with the connection).
+// A read-only copy of the stats pages (Export for the web) reads its numbers from files instead of the dashboard.
+const STATIC = !!window.HOOPS_STATIC;
+
+// The Drive and Colab actions: before any of them the Drive link is checked (one shared check, see driveReady).
+const DRIVE_ACTIONS = /^\/api\/(drive\/(send|import)|models\/(send|fetch))/;
+
 async function api(path, options) {
   options = options || {};
+  if (STATIC) return staticApi(path, options);
+  if (DRIVE_ACTIONS.test(path)) await driveReady();
   // X-Hoops says "this comes from the dashboard's own pages": the server changes nothing without it, and no
   // other website's page can add it (see own_pages_only in src/dashboard.py).
   const settings = { method: options.method || 'GET', headers: { 'X-Hoops': '1' } };
@@ -28,6 +36,53 @@ async function api(path, options) {
   }
   return data;
 }
+// The read-only copy: GET /api/x/y?view=z becomes the file api/x/y__view=z.json next to the page; nothing can be changed.
+async function staticApi(path, options) {
+  if ((options.method || 'GET') !== 'GET') throw new Error('This is a read-only copy of the stats. Changes are made in Hoops Tracker on the laptop.');
+  const file = 'api/' + path.replace(/^\/api\//, '').replace('?', '__') + '.json';
+  let reply;
+  try { reply = await fetch(file); } catch (problem) { throw new Error('This page of the copy is missing.'); }
+  if (!reply.ok) throw new Error('This page of the copy is missing (' + file + ').');
+  return reply.json();
+}
+
+/* ---- Google Drive and Colab: one check before every Drive action, with a plain card and a retry ---- */
+
+let driveCard = null;
+
+// Resolves once the Drive folder is connected. Shows a card with what is wrong and a "Try again" button; the
+// action that asked goes on by itself once the retry finds the folder. "Not now" stops the action.
+function driveReady() {
+  return new Promise(async function (resolve, reject) {
+    async function check() {
+      let reply;
+      try {
+        reply = await fetch('/api/drive/check', { method: 'POST', headers: { 'X-Hoops': '1' } }).then(function (r) { return r.json(); });
+      } catch (problem) {
+        reply = { connected: false, message: 'Hoops Tracker is not answering. Is the black window still open?' };
+      }
+      if (reply.connected) { hideDriveCard(); resolve(reply); return true; }
+      showDriveCard(reply.message || 'Google Drive is not connected.', check, function () { hideDriveCard(); reject(new Error('Stopped: Google Drive is not connected.')); });
+      return false;
+    }
+    check();
+  });
+}
+
+function showDriveCard(message, retry, cancel) {
+  hideDriveCard();
+  const again = el('button', { class: 'btn btn-red', type: 'button' }, 'Try again');
+  again.addEventListener('click', async function () { again.disabled = true; again.textContent = 'Checking...'; const ok = await retry(); if (!ok) { again.disabled = false; again.textContent = 'Try again'; } });
+  driveCard = el('div', { class: 'drive-card', role: 'alertdialog' }, [
+    el('div', { class: 'drive-card-title' }, 'Google Drive is not connected'),
+    el('div', { class: 'drive-card-text' }, message),
+    el('div', { class: 'row', style: 'margin-top: 12px' }, [again, el('button', { class: 'btn btn-light', type: 'button', onclick: cancel }, 'Not now')]),
+    el('div', { class: 'small muted', style: 'margin-top: 8px' }, 'Once the folder is back, press Try again and what you asked for carries on by itself.')]);
+  document.body.appendChild(driveCard);
+}
+
+function hideDriveCard() { if (driveCard) { driveCard.remove(); driveCard = null; } }
+
 function getJSON(path) { return api(path); }
 function putJSON(path, body) { return api(path, { method: 'PUT', body: body }); }
 function postJSON(path, body) { return api(path, { method: 'POST', body: body || {} }); }
@@ -197,6 +252,21 @@ const NAV_LINKS = [['seasons', 'Season', 'season.html'], ['teams', 'Teams', 'tea
 
 // Fill <header id="site-header"> with the logo, the nav, the search box and "← Start page".
 // `active` marks the screen ('seasons' | 'teams' | 'games' | 'players' | ''). options.search(text) answers typing.
+function staticTrim() {
+  // The read-only copy: buttons, forms, edit links and links to screens that are not in the copy go.
+  if (!STATIC) return;
+  document.documentElement.classList.add('static');
+  // Hidden, not removed: the pages' scripts still find their buttons and forms by id and carry on quietly.
+  document.querySelectorAll('button, form, select:not(#season-pick):not(.season-pick), input:not([type=search]), .edit-only, .card-dashed').forEach(function (node) { node.classList.add('static-hidden'); });
+  document.querySelectorAll('a[href="#"]').forEach(function (node) { node.classList.add('static-hidden'); });     // Edit links
+  document.querySelectorAll('a[href^="game.html"], a[href^="tag.html"], a[href^="report.html"], a[href^="games.html"], a[href^="process.html"], a[href^="index.html"], a[href^="seasons.html"], a[href$="#roster"]').forEach(function (node) {
+    if (node.dataset.staticDone) return;
+    node.dataset.staticDone = '1';
+    node.removeAttribute('href');
+    node.classList.add('static-plain');
+  });
+}
+
 function renderHeader(active, options) {
   const header = document.getElementById('site-header');
   if (!header) return;
@@ -213,6 +283,7 @@ function renderHeader(active, options) {
     el('label', { for: 'site-search', class: 'visually-hidden' }, 'Search'), search,
     el('a', { href: 'index.html', class: 'start-link' }, '← Start page')]);
   header.replaceChildren(brandBlock('GAME ANALYSIS'), nav, side);
+  if (STATIC) { side.lastChild.remove(); setTimeout(staticTrim, 0); new MutationObserver(function () { staticTrim(); }).observe(document.body, { childList: true, subtree: true }); }
 }
 
 /* ---- Processing & training: the sidebar ---- */

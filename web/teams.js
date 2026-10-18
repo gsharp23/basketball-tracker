@@ -95,7 +95,7 @@ function drawMap(reply) {
   if (!map) {
     map = L.map('map', { scrollWheelZoom: false });
     // Tiles come through the dashboard, which keeps each one it has seen (src/api_map.py), so the map works offline afterwards.
-    L.tileLayer('/api/map/tile/{z}/{x}/{y}.png', { minZoom: 6, maxZoom: 15, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    L.tileLayer(STATIC ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' : '/api/map/tile/{z}/{x}/{y}.png', { minZoom: 6, maxZoom: 15, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   }
   if (markers) markers.remove();
   markers = L.layerGroup().addTo(map);

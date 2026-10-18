@@ -116,7 +116,7 @@ function pointsChart(games) {
   });
   // Short labels: the date and the opponent's first word ("Feb 5 · Wilson"); the full name and the score on hover.
   // A game with no opponent says "Set opponent" and opens its Edit form.
-  const every = Math.ceil(played.length / 8);     // with many games, only every n-th label fits
+  const every = Math.ceil(played.length / 6);     // with many games, only every n-th label fits
   played.forEach(function (game, i) {
     if (i % every) return;
     const label = add('text', { x: x(i), y: 205, 'text-anchor': 'middle', 'font-size': 12, fill: game.opponent ? '#5a5f6a' : '#8f1219',
@@ -452,6 +452,17 @@ byId('roster-close').addEventListener('click', function () { byId('roster-panel'
 byId('roster-add').addEventListener('click', function () { byId('roster-rows').appendChild(rosterRow('', '')); });
 byId('roster-save').addEventListener('click', saveRoster);
 byId('make-current').addEventListener('click', makeCurrent);
+byId('open-export').addEventListener('click', function () { byId('export-panel').hidden = false; byId('export-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+byId('export-close').addEventListener('click', function () { byId('export-panel').hidden = true; });
+byId('export-go').addEventListener('click', async function () {
+  const button = byId('export-go');
+  button.disabled = true; button.textContent = 'Exporting...';
+  const reply = await tryToast(function () { return postJSON('/api/export', { first_names_only: byId('export-first-names').checked }); });
+  button.disabled = false; button.textContent = 'Export';
+  if (!reply) return;
+  byId('export-result').textContent = 'Done: ' + reply.windows_path + ' · ' + reply.megabytes + ' MB · ' + reply.files + ' files. Open season.html in that folder, or follow its README to publish.';
+  toast('Exported to ' + reply.windows_path, 'good');
+});
 byId('season-delete').addEventListener('click', deleteSeason);
 start().catch(function (problem) {
   toast(problem.message, 'bad');

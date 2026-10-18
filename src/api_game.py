@@ -271,7 +271,10 @@ def court_setup(stem: str):
                       "done": (folder / step["file"]).is_file(),
                       "picture_url": f"/files/outputs/{stem}/{step['picture']}" if (out / step["picture"]).is_file() else None})
     page = dash_common.job_info("click_page", last=3) if dash_common.job_running("click_page") else None
+    frames = dash_common.read_json(folder / "court_frames.json", {})
+    ignored = ((frames.get("summary") or {}).get("off_court") or {}) if isinstance(frames, dict) else {}
     return {"video": video, "steps": steps, "ready": folder.is_dir() and not court_mapper.setup_missing(video),
+            "ignored": ignored.get("dropped"),            # detections outside the court, moved out of the way
             "stand_in_court": dash_common.stand_in_court(video),
             "court_check_url": f"/files/outputs/{stem}/court_check.jpg" if (out / "court_check.jpg").is_file() else None,
             "open_page": {"kind": page["kind"], "video": page["video"], "address": page["address"]} if page else None}

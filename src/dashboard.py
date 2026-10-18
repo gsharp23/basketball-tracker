@@ -74,7 +74,7 @@ OWN_HOSTS = ("127.0.0.1", "localhost")
 
 # The screen modules of v3 (see the contract in dash_api.py), in the order they are included.
 # Each is included only if its file exists, so a screen can be added without touching this file.
-SCREEN_ROUTERS = ["api_seasons", "api_teams", "api_game", "api_tag", "api_training", "api_models", "api_drive", "api_process", "api_map"]
+SCREEN_ROUTERS = ["api_seasons", "api_teams", "api_game", "api_tag", "api_training", "api_models", "api_drive", "api_process", "api_map", "api_export"]
 
 
 def include_routers():
