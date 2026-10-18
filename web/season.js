@@ -184,6 +184,7 @@ function whoCell(row) {
     ? (row.opponent_id ? el('a', { href: withParams('team.html', { team: row.opponent_id }) }, row.opponent) : el('span', {}, row.opponent))
     : el('span', { class: 'muted' }, row.stem ? 'no opponent yet · ' + row.stem : 'no opponent yet');
   const extra = [];
+  if (row.squad) extra.push(el('span', { class: 'chip chip-sm ' + (row.squad === 'red' ? 'chip-red' : 'chip-dark') }, row.squad === 'red' ? 'Red' : 'Black'));
   if (row.kind === 'tournament') extra.push(el('span', { class: 'chip chip-grey chip-sm' }, 'Tournament'));
   if (row.unscheduled) extra.push(el('span', { class: 'small muted under' }, 'video on no scheduled game'));
   return el('td', { class: 'strong' }, [name].concat(extra));
@@ -273,6 +274,7 @@ async function openFixturePanel(row) {
   byId('fixture-time').value = row ? (row.time || '') : '';
   byId('fixture-opponent').value = row ? (row.opponent || '') : '';
   byId('fixture-kind').value = row ? (row.kind || '') : '';
+  byId('fixture-squad').value = row ? (row.squad || '') : '';
   byId('fixture-us').value = row && row.score_us !== null ? row.score_us : '';
   byId('fixture-them').value = row && row.score_them !== null ? row.score_them : '';
   byId('fixture-note').value = row ? (row.note || '') : '';
@@ -291,7 +293,7 @@ async function saveFixture(event) {
   button.disabled = true;
   const body = {
     date: byId('fixture-date').value, time: byId('fixture-time').value, opponent: byId('fixture-opponent').value.trim(),
-    home: fixtureHome(), kind: byId('fixture-kind').value, score_us: byId('fixture-us').value.trim(),
+    home: fixtureHome(), kind: byId('fixture-kind').value, squad: byId('fixture-squad').value, score_us: byId('fixture-us').value.trim(),
     score_them: byId('fixture-them').value.trim(), note: byId('fixture-note').value.trim(), stem: byId('fixture-stem').value || null,
   };
   const saved = await tryToast(function () {
@@ -337,10 +339,14 @@ function showLeaders() {
 
 /* ---- the roster ---- */
 
-function rosterRow(number, name) {
+function rosterRow(number, name, squad) {
+  const team = el('select', { class: 'input', 'aria-label': 'Squad' }, [
+    el('option', { value: 'both' }, 'Both'), el('option', { value: 'black' }, 'Black'), el('option', { value: 'red' }, 'Red')]);
+  team.value = squad || 'both';
   return el('tr', {}, [
     el('td', {}, el('input', { class: 'input', type: 'text', value: number, placeholder: 'No.', inputmode: 'numeric', 'aria-label': 'Jersey number' })),
-    el('td', {}, el('input', { class: 'input', type: 'text', value: name, placeholder: 'Name', 'aria-label': 'Player name' }))]);
+    el('td', {}, el('input', { class: 'input', type: 'text', value: name, placeholder: 'Name', 'aria-label': 'Player name' })),
+    el('td', {}, team)]);
 }
 
 function openRosterPanel() {
@@ -349,14 +355,15 @@ function openRosterPanel() {
   byId('roster-team-name').value = season.roster.name || '';
   const body = byId('roster-rows');
   const numbers = Object.keys(season.roster.players).sort(function (a, b) { return Number(a) - Number(b); });
-  body.replaceChildren.apply(body, numbers.map(function (number) { return rosterRow(number, season.roster.players[number]); }));
-  for (let i = 0; i < 3; i++) body.appendChild(rosterRow('', ''));
+  const squads = season.roster.squads || {};
+  body.replaceChildren.apply(body, numbers.map(function (number) { return rosterRow(number, season.roster.players[number], squads[number]); }));
+  for (let i = 0; i < 3; i++) body.appendChild(rosterRow('', '', 'both'));
   byId('season-delete').hidden = season.current;
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function readRoster() {
-  const players = {};
+  const players = {}, squads = {};
   for (const row of byId('roster-rows').querySelectorAll('tr')) {
     const boxes = row.querySelectorAll('input');
     const number = boxes[0].value.trim(), name = boxes[1].value.trim();
@@ -364,8 +371,9 @@ function readRoster() {
     if (!number) throw new Error('Every name needs a jersey number (the "No." box next to it).');
     if (number in players) throw new Error('Number ' + number + ' is listed twice.');
     players[number] = name;
+    squads[number] = row.querySelector('select').value;
   }
-  return { name: byId('roster-team-name').value.trim(), players: players };
+  return { name: byId('roster-team-name').value.trim(), players: players, squads: squads };
 }
 
 async function saveRoster() {

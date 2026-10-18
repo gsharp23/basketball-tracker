@@ -52,6 +52,9 @@
         <div class="field"><label for="fixture-kind">Kind</label>
           <select id="fixture-kind" class="input"><option value="">—</option><option value="league">League</option><option value="non-league">Non-league</option><option value="tournament">Tournament</option></select>
         </div>
+        <div class="field"><label for="fixture-squad">Squad</label>
+          <select id="fixture-squad" class="input"><option value="">Not set</option><option value="black">Black</option><option value="red">Red</option></select>
+        </div>
         <div class="field"><label for="fixture-us">Final score (us – them)</label>
           <div class="score-row"><input id="fixture-us" class="input" type="text" inputmode="numeric" placeholder="Us"><span>–</span><input id="fixture-them" class="input" type="text" inputmode="numeric" placeholder="Them"></div>
         </div>
@@ -91,6 +94,9 @@
         <div class="field"><label for="assign-us">Final score (us – them)</label>
           <div class="score-row"><input id="assign-us" class="input" type="text" inputmode="numeric" placeholder="Us"><span>–</span><input id="assign-them" class="input" type="text" inputmode="numeric" placeholder="Them"></div>
         </div>
+        <div class="field"><label for="assign-squad">Squad</label>
+          <select id="assign-squad" class="input"><option value="">Not set</option><option value="black">Black</option><option value="red">Red</option></select>
+        </div>
         <label class="check check-box" style="align-self: end"><input type="checkbox" id="assign-test">This is a test clip (never in the stats)</label>
       </div>
       <div class="row">
@@ -110,7 +116,7 @@
     <div class="field" style="max-width: 360px"><label for="roster-team-name">Our team's name</label><input id="roster-team-name" type="text" maxlength="60"></div>
     <div class="table-wrap">
       <table class="table roster-table">
-        <thead><tr><th>No.</th><th>Player</th></tr></thead>
+        <thead><tr><th>No.</th><th>Player</th><th>Team</th></tr></thead>
         <tbody id="roster-rows"></tbody>
       </table>
     </div>

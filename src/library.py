@@ -55,10 +55,11 @@ import possessions
 import shots
 
 UNASSIGNED = "unassigned"           # the season id of a game that is not in any season
+SQUADS = ("black", "red", "both")   # our two squads; a player can be on both, a game is one or the other (or "" = unknown)
 
 # Every key of game_info.json, with its value before the coach types anything.
 INFO_DEFAULTS = {"season_id": None, "opponent_id": None, "opponent": "", "date": "", "home": None, "our_team": None,
-                 "score_us": None, "score_them": None, "processed_on": None, "test_clip": False,
+                 "score_us": None, "score_them": None, "processed_on": None, "test_clip": False, "squad": "",
                  "conditions": {"gym": "", "light": "", "camera": ""}}
 LIGHTS = ("", "good", "dim")
 PROCESSED_ON = (None, "laptop", "colab")
@@ -135,11 +136,13 @@ def clean_season(saved):
     saved = saved if isinstance(saved, dict) else {}
     roster = saved.get("roster") if isinstance(saved.get("roster"), dict) else {}
     players = roster.get("players") if isinstance(roster.get("players"), dict) else {}
+    squads = roster.get("squads") if isinstance(roster.get("squads"), dict) else {}
     schedule = saved.get("schedule") if isinstance(saved.get("schedule"), list) else []
     return {"name": str(saved.get("name") or "").strip() or "Season", "start": str(saved.get("start") or ""),
             "current": bool(saved.get("current")),
             "roster": {"name": str(roster.get("name") or ""),
-                       "players": {str(number): str(name) for number, name in players.items()}},
+                       "players": {str(number): str(name) for number, name in players.items()},
+                       "squads": {str(number): squad for number, squad in squads.items() if squad in SQUADS and str(number) in players}},
             "schedule": [row for row in (clean_fixture(entry) for entry in schedule) if row["id"]]}
 
 
@@ -187,9 +190,11 @@ def season_or_problem(seasons, season_id):
 
 
 def check_roster(roster):
-    """A roster as the page sends it, checked: {"name", "players": {number: name}}. Problem when a number is not one."""
+    """A roster as the page sends it, checked: {"name", "players": {number: name}, "squads": {number: black | red | both}}.
+    Problem when a number is not one. A player with no squad given is "both"."""
     roster = roster if isinstance(roster, dict) else {}
-    players = {}
+    players, squads = {}, {}
+    given = roster.get("squads") if isinstance(roster.get("squads"), dict) else {}
     for number, name in (roster.get("players") or {}).items():
         number, name = str(number).strip(), str(name or "").strip()
         if not number:
@@ -199,7 +204,9 @@ def check_roster(roster):
         if number in players:
             raise Problem(f"Number {number} is listed twice.")
         players[number] = name
-    return {"name": str(roster.get("name") or "").strip()[:60], "players": players}
+        squad = str(given.get(number) or given.get(str(int(number))) or "both").lower()
+        squads[number] = squad if squad in SQUADS else "both"
+    return {"name": str(roster.get("name") or "").strip()[:60], "players": players, "squads": squads}
 
 
 def create_season(name, start=None, roster=None, current=False):
@@ -596,6 +603,11 @@ def check_info(stem, changes):
         clean["processed_on"] = changes["processed_on"]
     if "test_clip" in changes:
         clean["test_clip"] = bool(changes["test_clip"])
+    if "squad" in changes:
+        squad = str(changes["squad"] or "").lower()
+        if squad not in ("", "black", "red"):
+            raise Problem("The squad is Black or Red.")
+        clean["squad"] = squad
     if "conditions" in changes:
         given = changes["conditions"] if isinstance(changes["conditions"], dict) else {}
         conditions = dict(game_info(stem)["conditions"])
@@ -670,7 +682,7 @@ def games_in(season_id=None, team_id=None, include_test=False):
 # ---------------------------------------------------------------- the schedule (the season's fixtures)
 
 FIXTURE_KINDS = ("", "league", "non-league", "tournament")
-FIXTURE_GAME_KEYS = ("date", "home", "opponent_id", "score_us", "score_them")     # kept the same in game_info.json
+FIXTURE_GAME_KEYS = ("date", "home", "opponent_id", "score_us", "score_them", "squad")     # kept the same in game_info.json
 
 
 def clean_fixture(saved):
@@ -688,6 +700,7 @@ def clean_fixture(saved):
             "score_us": score(saved.get("score_us")), "score_them": score(saved.get("score_them")),
             "stem": str(saved.get("stem") or "") or None,
             "kind": saved.get("kind") if saved.get("kind") in FIXTURE_KINDS else "",
+            "squad": saved.get("squad") if saved.get("squad") in ("black", "red") else "",
             "note": str(saved.get("note") or "")[:120]}
 
 
@@ -731,6 +744,11 @@ def check_fixture_changes(season, fixture, changes):
         row["kind"] = kind
     if "note" in changes:
         row["note"] = str(changes["note"] or "").strip()[:120]
+    if "squad" in changes:
+        squad = str(changes["squad"] or "").lower()
+        if squad not in ("", "black", "red"):
+            raise Problem("The squad is Black or Red.")
+        row["squad"] = squad
     if "stem" in changes:
         stem = str(changes["stem"] or "").strip() or None
         if stem and not video_of(stem):
@@ -762,7 +780,8 @@ def push_fixture_into_game(season_id, fixture):
     stem = fixture["stem"]
     if not stem or not video_of(stem):
         return
-    changes = {"season_id": season_id, "opponent_id": fixture["opponent_id"], "date": fixture["date"], "home": fixture["home"]}
+    changes = {"season_id": season_id, "opponent_id": fixture["opponent_id"], "date": fixture["date"], "home": fixture["home"],
+               "squad": fixture["squad"]}
     info = game_info(stem)
     if info["score_us"] is None and info["score_them"] is None:
         changes["score_us"], changes["score_them"] = fixture["score_us"], fixture["score_them"]
@@ -860,7 +879,7 @@ def schedule_rows(season_id):
     rows, linked = [], set()
     for fixture in (season["schedule"] if season else []):
         base = {"fixture_id": fixture["id"], "time": fixture["time"], "kind": fixture["kind"], "note": fixture["note"],
-                "unscheduled": False}
+                "squad": fixture["squad"], "unscheduled": False}
         stem = fixture["stem"] if fixture["stem"] in games else None
         if stem:
             linked.add(stem)
@@ -881,7 +900,7 @@ def schedule_rows(season_id):
         rows.append(row)
     for stem, game in games.items():
         if stem not in linked:
-            rows.append(dict(game_row(game), fixture_id=None, time="", kind="", note="", unscheduled=True))
+            rows.append(dict(game_row(game), fixture_id=None, time="", kind="", note="", squad=game["info"]["squad"], unscheduled=True))
     rows.sort(key=lambda row: (row["date"] or "9999", row["time"], row.get("stem") or ""))
     return rows
 
@@ -1052,6 +1071,7 @@ def game_row(game):
     tagged_them = sum(int(shot.get("worth") or 0) for shot in theirs if shot.get("made"))
     typed = info["score_us"] is not None and info["score_them"] is not None
     row = {"stem": stem, "video": game["video"], "name": stem, "date": info["date"], "date_is_guess": info["date_is_guess"],
+           "squad": info["squad"],
            "season_id": game["season_id"], "opponent": info["opponent"], "opponent_id": info["opponent_id"],
            "home": info["home"], "status": game["status"], "running": game["running"], "seconds": game["seconds"],
            "shots": game["shots"], "stand_in_court": game["stand_in_court"], "processed_on": info["processed_on"],

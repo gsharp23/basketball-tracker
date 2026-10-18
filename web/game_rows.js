@@ -251,6 +251,7 @@ function fillFormFrom(stem) {
   byId('assign-us').value = info.score_us === null ? '' : info.score_us;
   byId('assign-them').value = info.score_them === null ? '' : info.score_them;
   byId('assign-test').checked = !!info.test_clip;
+  byId('assign-squad').value = info.squad || '';
   setHome(info.home);
 }
 
@@ -300,6 +301,7 @@ async function saveAssignment(event) {
       score_us: byId('assign-us').value.trim(),
       score_them: byId('assign-them').value.trim(),
       test_clip: byId('assign-test').checked,
+      squad: byId('assign-squad').value,
     });
   });
   button.disabled = false;

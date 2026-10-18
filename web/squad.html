@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squad · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  .squad-badge { width: 64px; height: 64px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 26px; color: #ffffff; flex: none; }
+  .squad-badge.black { background: var(--ink); }
+  .squad-badge.red { background: var(--red); }
+  #schedule-rows td:first-child, #schedule-rows td:nth-child(4) { white-space: nowrap; }
+  .season-pick { min-height: 44px; font-weight: 600; min-width: 170px; max-width: 280px; }
+</style>
+</head>
+<body class="area-analysis">
+<header class="site-header" id="site-header"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div class="head-with-badge">
+      <span class="squad-badge" id="badge" aria-hidden="true">B</span>
+      <div class="head-text">
+        <a href="teams.html" class="back-link">← Teams</a>
+        <h1 class="title title-medium" id="title">Squad</h1>
+        <div class="subtitle" id="subtitle"></div>
+      </div>
+    </div>
+    <div class="head-side">
+      <div class="segment" id="squad-switch"><a href="squad.html?squad=black" data-squad="black">Black</a><a href="squad.html?squad=red" data-squad="red">Red</a></div>
+      <select id="season-pick" class="input season-pick" aria-label="Season"></select>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <section class="card col-main">
+      <div class="card-head"><h2 class="card-title">Schedule</h2><span class="card-note" id="schedule-note"></span></div>
+      <div class="table-wrap">
+        <table class="table" style="width: 100%">
+          <thead><tr><th>Date</th><th>Opponent</th><th>Where</th><th>Result</th><th></th></tr></thead>
+          <tbody id="schedule-rows"></tbody>
+        </table>
+      </div>
+      <div class="hint">Games are added and edited on the Season page (Add a game, Edit), where each one is given its squad.</div>
+    </section>
+    <section class="card col-side">
+      <div class="card-head"><h2 class="card-title">Roster</h2><span class="card-note" id="roster-note"></span></div>
+      <div class="table-wrap">
+        <table class="table roster-table">
+          <thead><tr><th>No.</th><th>Player</th><th>Team</th></tr></thead>
+          <tbody id="roster-rows"></tbody>
+        </table>
+      </div>
+      <div class="hint">Names and squads are kept on the Season page's Roster, on this laptop only.</div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+<script src="squad.js"></script>
+</body>
+</html>
