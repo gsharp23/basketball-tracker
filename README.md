@@ -271,18 +271,31 @@ tagged shots; time on camera and distance from `stats.json` (never "minutes
 played": the camera follows the play); what a team runs from the labelled
 possessions; a game with no season is listed under "Unassigned".
 
-### Model training
+### Improve the detector
 
 The detector that finds players, referees, the hoop and the ball can be
-trained on the team's own games, in five numbered steps (the sidebar):
+trained on the team's own games. One page, `improve.html`, walks the six
+steps top to bottom with one live button at a time (the same shape as
+Process a game): the step rows, a status line ("Step 3 of 6. Step 3 is
+locked: 97 of 150 pictures confirmed, you need 120."), three counts at the
+top (confirmed pictures, versions, models). The option screens below are
+reached from their step only; the sidebar no longer lists them.
 
-| Step | Screen | What it does |
+| Step | What it does | Option screen |
 |---|---|---|
-| Overview | `train.html` | The project line (four classes: Ball, Referee, Player, Hoop), the five-step strip with live counts, **dataset health** (labels per class, pictures by condition: good light, dim gym, zoomed out, blurred; "need more" under 150), the next steps |
-| 1 · Upload | `upload.html` | Pictures come from the game videos in the clips folder, processed or not. Tick the games, say how many pictures each (150 by default); the tool spreads them over the whole video by seeking, works out each picture's conditions (dim, blurred, zoomed out) and, with **label assist** on, runs the detector in use to draw first boxes. One game can be kept for testing. The job shows progress and time left |
-| 2 · Annotate | `annotate.html` | The box editor (it can be used while the Upload job is still running label assist: the two never write over each other, an answer saved here is kept): **hard pictures first** (the model was unsure, dim, blurred, small ball), in order, or only unsure. Boxes in class colours, dashed when the model was unsure; drag to move, corners to resize, Delete, draw a new box with B, 1–4 choose the class, a 3× zoom inset follows the pointer. "Looks right · next" (Space), "No ball here" (N), "Can't tell" (S), Undo (Z); a filmstrip of the neighbours. Keys are listed on the buttons |
-| 3 · Dataset | `dataset.html` | Checked pictures become a numbered **version**: train / check / test split (a whole game kept back for the test when there is more than one game; otherwise stretches of the same game, and the page says this is a weaker test), the variations for bad conditions (darker and brighter, motion blur, zoomed out, slight tilt, mirror, colour shift), "Build version N" with progress, the versions table with "Download zip" |
-| 4 · Train · 5 · Models | `models.html` | "1 · Send dataset to Drive" copies the version's zip (and the model to start from) into the Drive folder; "2 · Open Colab and train" opens the notebook; the Colab line says what the notebook last reported; "3 · Bring back" copies a finished model into `models/`. The **score by version** chart and the **models table** (per class, in a dim gym, speed on this laptop; the downloaded models are named in plain words, "Player finder" and "Ball finder", with the file name as the tooltip, and the small general model is listed only while it is the one in use), "Use this one" (the pipeline uses that model from the next run on), "Try on a clip" (runs the model over the test clip and measures frames per second), "Where it still struggles" |
+| 1 · Take pictures | Pictures from the game videos, spread over each video; with **label assist** on, the detector in use draws the first boxes. While the job runs the row shows its progress; stopping early leaves pictures with no boxes to confirm, and the Stop button says so first | `upload.html` |
+| 2 · Confirm the boxes | The box editor: Space confirms, drag fixes a box, N is No ball here, ? is Can't tell; hard pictures first; a progress bar | `annotate.html` |
+| 3 · Build version vN | Locked until 120 pictures are confirmed and none is waiting. Packs the confirmed pictures into a zip, split train / check / test, with the variations ticked | `dataset.html` |
+| 4 · Train on Colab | Sends vN to Drive and opens the notebook; you press Run all. The row waits while Colab trains | `models.html#train` |
+| 5 · Bring the model back | Copies the finished model from Drive and **scores it** on the version's test pictures (`src/model_score.py`, a background job): mAP50 overall and per class, stored with the version (`version.json` "score") and on the model's card. Honest only when the version kept a whole game aside | (from the page) |
+| 6 · Use it | "Try on a clip" and "Use this one" (the detector for every game from then on). Then the list starts again at step 1 | (from the page) |
+
+The Dashboard's chart, its class bars and the **Versions and models** list
+(`versions.html`: every version with its date, pictures, variations and
+score, every model with its version, score and whether it is in use;
+"Score again" on any of them) read the stored scores; a version with none
+says "Not scored yet" and draws a hollow dot.
+
 
 The Overview has no "New project" button, although the design had one: a new project would throw away every box the coach has drawn, so starting over is done by hand (move the `data/_training` folder away). See "Training the detector" below for the files and what was tested.
 

@@ -26,6 +26,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+import api_models
 import api_seasons
 import config
 import dash_common
@@ -36,6 +37,11 @@ import training_data as td
 import training_versions as tv
 
 router = APIRouter(prefix="/api/process")
+
+# "Score this version": model_score.py as a background job (one model at a time on this laptop).
+dash_common.JOB_KINDS["score_model"] = {"script": "model_score.py", "heavy": True, "name": "score_model",
+                                        "options": ["--score-version", "--model"]}
+TEST_CLIP = "clips/test.mp4"            # the job framework wants a clip; the scorer ignores it
 
 CONFIRMED_TO_BUILD = 120          # the Dashboard's rule for building a version (the Dataset screen enforces its own)
 COPY_BYTES_PER_SECOND = 8e6        # a rough speed of the copy into the Drive folder, for "about N minutes"
@@ -93,7 +99,7 @@ def detector_box():
     name = td.detector_name()
     card = next((model for model in dash_common.model_files() if model["name"] == name), None) or {}
     version = card.get("dataset_version")
-    score = card.get("map50")             # written by "Score this version" (item 11); None until then
+    score = card.get("map50")             # written by "Score this version" (model_score.py); None until then
     return {"name": name, "label": dash_common.model_label(name, card), "version": version,
             "built_words": f"built from v{version}" if version else "downloaded, not trained here",
             "score": score, "score_words": f"score {score:.2f}" if isinstance(score, (int, float)) else "not scored yet"}
@@ -373,10 +379,19 @@ def game(stem: str):
 def versions_list():
     found = []
     for info in tv.list_versions():
+        score = info.get("score") if isinstance(info.get("score"), dict) else None
         found.append({"number": info["number"], "built": info.get("built"), "pictures": info["counts"]["pictures"],
-                      "score": info.get("score")})          # "score" {map50, per_class, scored} arrives with item 11
+                      "counts": info["counts"], "test_game": info.get("test_game"), "has_zip": info.get("has_zip"),
+                      "variations": tv.variation_words(info.get("augmentations", [])), "score": score})
     found.sort(key=lambda version: version["number"])
     return found
+
+
+def model_for(number, cards=None):
+    """The newest model trained from version `number` on this laptop (a model_cards() row), or None."""
+    cards = cards if cards is not None else tv.model_cards()
+    mine = [card for card in cards if card["card"].get("dataset_version") == number]
+    return max(mine, key=lambda card: card["card"].get("trained") or "") if mine else None
 
 
 def improve_card(counts, games_with_pictures, versions, job):
@@ -386,16 +401,16 @@ def improve_card(counts, games_with_pictures, versions, job):
     running = bool(job.get("running") or job.get("starting"))
     if running:
         status, step_line = "Taking pictures and drawing first boxes", "Step 1 of 6 · the pictures are being prepared."
-        button, href = "Continue: Watch the pictures job", "upload.html"
+        button, href = "Continue: Watch the pictures job", "improve.html"
     elif not captured:
         status, step_line = "No pictures yet", "Step 1 of 6 · take pictures from a game to start."
-        button, href = "Continue: Take pictures", "upload.html"
+        button, href = "Continue: Take pictures", "improve.html"
     elif unchecked:
         status, step_line = f"Confirming boxes · {confirmed} of {captured}", f"Step 2 of 6 · {unchecked} picture{'s' if unchecked != 1 else ''} still waiting to be confirmed."
         button, href = f"Continue: Confirm boxes ({unchecked} left)", "annotate.html"
     else:
         status, step_line = f"Boxes confirmed · {confirmed} of {captured}", f"Step 3 of 6 · build version v{next_number} from the confirmed pictures."
-        button, href = f"Continue: Build version v{next_number}", "dataset.html"
+        button, href = f"Continue: Build version v{next_number}", "improve.html"
     if confirmed < CONFIRMED_TO_BUILD:
         block = {"ok": False, "text": f"Build v{next_number} unlocks at {CONFIRMED_TO_BUILD} confirmed pictures (you have {confirmed})."}
     else:
@@ -477,3 +492,233 @@ def overview():
     return {"season": season, "tiles": tiles, "chart": chart, "process": process_card(rows),
             "improve": improve_card(counts, with_pictures, versions, job), "colab_url": drive_link.PROCESS_NOTEBOOK_URL,
             "footer": "Colab only runs when you press Run all in its tab. The app prepares the files and opens the notebook; it cannot press the button for you."}
+
+
+# ---------------------------------------------------------------- Improve the detector: six steps
+
+CONFIRMED_WORDS = "Space confirms, drag fixes a box, N is No ball here, ? is Can't tell. Hard pictures come first."
+
+
+def pictures_words(records):
+    """"150 pictures from vs Riverside · 24 Jan 2026 and 1 more game, label assist on"."""
+    games = sorted({record["game"] for record in records})
+    titles = []
+    for game in games[:2]:
+        row = next((r for r in library.list_games() if r["name"] == game), None)
+        titles.append(game_title(library.game_row(row)) if row else game)
+    words = f"{len(records)} pictures from " + (" and ".join(titles) if len(games) <= 2 else f"{titles[0]} and {len(games) - 1} more games")
+    assisted = td.assisted_count(records)
+    return words + (", label assist on." if assisted else ", no label assist.")
+
+
+def condition_tip(records):
+    counts = td.condition_counts(records)
+    total = len(records)
+    if total and counts.get("good", 0) == total:
+        return f"All {total} are good light; take the next batch from a dim-gym game."
+    if total and counts.get("dim", 0) == 0:
+        return "No dim-gym pictures yet; take the next batch from a game in a dark gym."
+    return ""
+
+
+def improve_steps():
+    """The six step rows of Improve the detector (the same shape as the game's steps) and what the header says."""
+    labels = td.load_labels()
+    records = td.records_of(labels)
+    counts = td.status_counts(records)
+    pictures, confirmed, unchecked = counts["pictures"], counts["checked"], counts["unchecked"]
+    job = dash_common.job_info("pick_frames", last=3)
+    running = bool(job.get("running") or job.get("starting"))
+    skipped = sum(1 for record in records if record["status"] == "unchecked" and not record["boxes"])
+    versions = versions_list()
+    cards = tv.model_cards()
+    latest = versions[-1] if versions else None
+    in_use = td.detector_name()
+    box = detector_box()
+    # The version this round of training is about: the latest one when it was built from every confirmed picture,
+    # else the next number (still to build).
+    if latest and unchecked == 0 and latest["pictures"] == confirmed:
+        working, built = latest, True
+    else:
+        working, built = {"number": (latest["number"] + 1) if latest else 1, "score": None, "has_zip": False}, False
+    number = working["number"]
+    model = model_for(number, cards) if built else None
+    model_name = model["name"] if model else f"detector_v{number}.pt"
+    drive = api_models.drive_status()
+    colab = api_models.colab_status(drive)
+    request = dash_common.read_json(Path(drive["path"]) / "training" / "request.json", {}) if drive.get("connected") else {}
+    request = request if isinstance(request, dict) else {}
+    colab_for_this = request.get("dataset_version") == number
+    waiting_in_drive = [row for row in api_models.waiting_in_drive(drive) if row["name"].startswith(f"detector_v{number}")] if drive.get("connected") else []
+    score_job = dash_common.job_info("score_model", last=3)
+    scoring = bool(score_job.get("running") or score_job.get("starting"))
+    scored = built and isinstance(working.get("score"), dict) and working["score"].get("model") == model_name
+
+    steps = []
+    # 1 · take pictures
+    step1 = {"number": 1, "title": "Take pictures", "state": "live", "button": "Take pictures", "action": {"kind": "link", "href": "upload.html"},
+             "explanation": "Pictures from your games, with the detector drawing its first boxes (label assist).", "locked_reason": None,
+             "note": None, "done_link": None, "progress": None}
+    if running:
+        progress = job.get("progress") or {}
+        line = (job.get("lines") or [""])[-1].strip()
+        step1.update(state="busy", button="Running...", explanation="Still running: " + (line or "taking pictures and drawing first boxes"),
+                     progress={"how_far": progress.get("how_far"), "words": progress.get("left") or ""},
+                     note=f"These {skipped} were skipped when the job was stopped early. Stopping again leaves them with no boxes to confirm." if skipped else None)
+    elif pictures:
+        step1.update(state="done", explanation=pictures_words(records) + (" " + condition_tip(records) if condition_tip(records) else ""),
+                     done_link={"words": "Take more", "href": "upload.html"}, button=None, action=None,
+                     note=f"{skipped} pictures have no boxes to confirm: the job that drew them was stopped early. Take pictures again (the same games) to finish them." if skipped else None)
+    steps.append(step1)
+    # 2 · confirm
+    step2 = {"number": 2, "title": "Confirm the boxes", "locked_reason": None, "note": None, "done_link": None,
+             "explanation": f"{confirmed} of {pictures} confirmed, {unchecked} left. {CONFIRMED_WORDS} About {max(1, round(unchecked / 6))} minutes.",
+             "progress": {"how_far": (confirmed / pictures) if pictures else 0, "words": f"{confirmed} of {pictures}"}}
+    if not pictures or running:
+        step2.update(state="locked", button="Confirm boxes", action=None, locked_reason="Locked until the pictures are in.")
+    elif unchecked:
+        step2.update(state="live", button=f"Confirm boxes ({unchecked} left)", action={"kind": "link", "href": "annotate.html"})
+    else:
+        step2.update(state="done", button=None, action=None, explanation=f"{confirmed} of {pictures} confirmed. {CONFIRMED_WORDS}",
+                     done_link={"words": "Look again", "href": "annotate.html?mode=order"})
+    steps.append(step2)
+    # 3 · build
+    step3 = {"number": 3, "title": f"Build version v{number}", "locked_reason": None, "note": None, "done_link": None, "progress": None,
+             "explanation": "Packs the confirmed pictures into a zip, split train / check / test." + (" Tick darker or blur if all pictures are good light." if condition_tip(records) else "")}
+    if built:
+        step3.update(state="done", button=None, action=None,
+                     explanation=f"v{number} built {fmt_day(latest['built'])}: {latest['pictures']} pictures" + (f", {latest['test_game']} kept aside for testing." if latest.get("test_game") else ", test pictures cut from the same games (a weaker test)."),
+                     done_link={"words": "Versions", "href": "versions.html"})
+    elif confirmed < CONFIRMED_TO_BUILD or unchecked or running:
+        reason = (f"Locked: needs {CONFIRMED_TO_BUILD} confirmed pictures, you have {confirmed}. Building now would train on guesses."
+                  if confirmed < CONFIRMED_TO_BUILD else f"Locked until every picture is confirmed ({unchecked} left).")
+        step3.update(state="locked", button=f"Build version v{number}", action=None, locked_reason=reason)
+    else:
+        step3.update(state="live", button=f"Build version v{number}", action={"kind": "link", "href": "dataset.html"})
+    steps.append(step3)
+    # 4 · train
+    step4 = {"number": 4, "title": "Train on Colab", "locked_reason": None, "note": None, "done_link": None, "progress": None,
+             "explanation": f"Sends v{number} to Drive and opens the notebook in a tab. You press Run all; the app cannot do that for you. About an hour."}
+    if model or (colab["state"] == "done" and colab_for_this) or waiting_in_drive:
+        step4.update(state="done", button=None, action=None, explanation=f"Trained on Colab: {colab['line'] if colab_for_this else 'the model is on this laptop.'}",
+                     done_link={"words": "Train again", "href": "models.html#train"})
+    elif colab["state"] in ("running", "stale") and colab_for_this:
+        step4.update(state="waiting", button=None, action=None, explanation=colab["line"], note=colab["line"] if colab["state"] == "stale" else None)
+    elif built:
+        step4.update(state="live", button=f"Send v{number} to Drive and open Colab", action={"kind": "link", "href": "models.html#train"})
+    else:
+        step4.update(state="locked", button="Send to Drive and open Colab", action=None, locked_reason=f"Locked until v{number} is built.")
+    steps.append(step4)
+    # 5 · bring back and score
+    step5 = {"number": 5, "title": "Bring the model back", "locked_reason": None, "note": None, "done_link": None, "progress": None,
+             "explanation": "Copies the finished model from Drive and scores it on the test pictures. About a minute to copy, a few minutes to score."}
+    if scoring:
+        step5.update(state="busy", button="Scoring...", action=None, explanation="Scoring the model on the test pictures: " + ((score_job.get("lines") or [""])[-1].strip() or "starting"))
+    elif model and scored:
+        sc = working["score"]
+        step5.update(state="done", button=None, action=None,
+                     explanation=f"{model_name} scored {sc['map50']:.2f} on {sc['test_pictures']} test pictures" + (f" from {sc['test_game']}" if sc.get("test_game") else "") + f" · {fmt_day(sc['scored'])}.",
+                     done_link={"words": "Score again", "href": f"#score-{number}"})
+    elif model and not scored:
+        step5.update(state="live", button="Score this version", action={"kind": "post", "path": "/api/process/score", "body": {"version": number, "model": model_name}})
+    elif waiting_in_drive or (colab["state"] == "done" and colab_for_this):
+        name = waiting_in_drive[0]["name"] if waiting_in_drive else model_name
+        step5.update(state="live", button="Bring model back", action={"kind": "post", "path": "/api/process/fetch-and-score", "body": {"version": number, "model": name}})
+    else:
+        step5.update(state="locked", button="Bring model back", action=None, locked_reason="Locked until Colab finishes training.")
+    steps.append(step5)
+    # 6 · use it
+    step6 = {"number": 6, "title": "Use it", "locked_reason": None, "note": None, "done_link": None, "progress": None,
+             "explanation": "Makes the new model the detector for every game. Try on a clip first if you want to compare it with the one in use."}
+    if model and in_use == model_name:
+        step6.update(state="done", button=None, action=None, explanation=f"{model_name} is the detector in use. The list starts again at step 1 for the next batch of pictures.",
+                     done_link={"words": "Models", "href": "versions.html"})
+    elif model and scored:
+        step6.update(state="live", button="Use this one", action={"kind": "post", "path": "/api/models/use", "body": {"name": model_name}},
+                     second={"words": "Try on a clip", "action": {"kind": "post", "path": "/api/models/try", "body": {"name": model_name}}})
+    else:
+        step6.update(state="locked", button="Use this one", action=None, locked_reason="Locked until a new model has a score.")
+    steps.append(step6)
+    current = next((step["number"] for step in steps if step["state"] != "done"), 7)
+    if current == 7:
+        current = 1          # the round is complete: the next batch starts at step 1
+    head = {"confirmed": f"{confirmed} of {pictures} confirmed",
+            "versions": f"{len(versions)} version{'s' if len(versions) != 1 else ''}" + (f" · v{latest['number']} latest" if latest else ""),
+            "models": f"{len(cards)} model{'s' if len(cards) != 1 else ''} · {box['label']} in use"}
+    step = steps[current - 1]
+    if step["state"] == "locked":
+        if current == 3 and confirmed < CONFIRMED_TO_BUILD:
+            line = f"Step 3 is locked: {confirmed} of {pictures} pictures confirmed, you need {CONFIRMED_TO_BUILD}. Confirm {CONFIRMED_TO_BUILD - confirmed} more and it unlocks."
+        else:
+            line = step["locked_reason"]
+        block = {"ok": False, "text": line}
+    elif step.get("note"):
+        block = {"ok": False, "text": step["note"]}
+    elif step["state"] in ("waiting", "busy"):
+        block = {"ok": True, "text": "Nothing to press: it is working. This page refreshes by itself."}
+    else:
+        block = {"ok": True, "text": "Nothing is blocking you."}
+    return {"steps": steps, "current": current, "status_line": f"Step {current} of 6.", "block": block, "head": head,
+            "working_version": number, "colab_url": api_models.COLAB_URL}
+
+
+@router.get("/improve")
+def improve():
+    try:
+        return improve_steps()
+    except (OSError, ValueError, library.Problem) as problem:
+        raise HTTPException(503, f"The training data cannot be read: {problem}")
+
+
+def start_scoring(number, model_name):
+    if not any(v["number"] == number and v["has_zip"] for v in versions_list()):
+        raise HTTPException(400, f"Version {number} has no zip to score on.")
+    if not (tv.models_dir() / model_name).is_file():
+        raise HTTPException(400, f"There is no model called {model_name} in the models folder.")
+    if not dash_common.is_clip_video(TEST_CLIP):
+        raise HTTPException(400, "The test clip is not in the clips folder (the scoring job needs one to start).")
+    try:
+        return dash_common.start_job("score_model", TEST_CLIP, ["--score-version", str(number), "--model", model_name])
+    except ValueError as problem:
+        raise HTTPException(409, str(problem))
+
+
+@router.post("/score")
+def score(body: dict):
+    """Score this version: {"version": 5, "model": "detector_v5.pt"} (the model defaults to the newest trained from it)."""
+    body = body if isinstance(body, dict) else {}
+    try:
+        number = int(body.get("version"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Which version?")
+    model = str(body.get("model") or "")
+    if not model:
+        found = model_for(number)
+        if not found:
+            raise HTTPException(400, f"No model trained from v{number} is on this laptop yet.")
+        model = found["name"]
+    return {"job": start_scoring(number, model), "version": number, "model": model}
+
+
+@router.post("/fetch-and-score")
+def fetch_and_score(body: dict):
+    """Bring the model back from Drive, then score it on its version's test pictures."""
+    body = body if isinstance(body, dict) else {}
+    name = str(body.get("model") or "")
+    if not (tv.models_dir() / name).is_file():
+        api_models.fetch({"name": name})
+    return score({"version": body.get("version"), "model": name})
+
+
+@router.get("/versions")
+def versions():
+    """The plain list: every version (number, date, pictures, variations, score) and every model (name, version, score, in use)."""
+    cards = tv.model_cards()
+    in_use = td.detector_name()
+    models = []
+    for card in cards:
+        info = card["card"]
+        models.append({"name": card["name"], "label": dash_common.model_label(card["name"], info), "version": info.get("dataset_version"),
+                       "trained": info.get("trained"), "map50": info.get("map50"), "scored_on_version": info.get("scored_on_version"),
+                       "in_use": card["name"] == in_use, "megabytes": card["megabytes"]})
+    return {"versions": versions_list(), "models": models, "scoring": dash_common.job_info("score_model", last=2)}

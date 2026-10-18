@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versions and models · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+    <div class="page-head">
+      <div class="head-text">
+        <a href="improve.html" class="back-link">← Improve the detector</a>
+        <h1 class="title">Versions and models</h1>
+        <div class="subtitle">Every dataset version built and every model on this laptop, with their scores. A score is how often the model's boxes match yours on the version's test pictures; 1.0 is perfect.</div>
+      </div>
+    </div>
+    <section class="card">
+      <div class="card-head"><h2 class="card-title">Versions</h2><span class="card-note" id="scoring-note"></span></div>
+      <div class="table-wrap">
+        <table class="table" style="width: 100%">
+          <thead><tr><th>Version</th><th>Built</th><th>Pictures</th><th>Test</th><th>Variations</th><th>Score</th><th></th></tr></thead>
+          <tbody id="version-rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">Models</h2>
+      <div class="table-wrap">
+        <table class="table" style="width: 100%">
+          <thead><tr><th>Model</th><th>From version</th><th>Trained</th><th>Score</th><th>In use</th><th></th></tr></thead>
+          <tbody id="model-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+<script src="versions.js"></script>
+</body>
+</html>

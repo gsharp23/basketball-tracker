@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Improve the detector · Hoops Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<style>
+  .head-counts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 14px; color: var(--muted); }
+  .head-counts b { color: var(--ink); }
+  .step-row .progress { width: 100%; max-width: 420px; margin-top: 8px; }
+  .footer-line { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body class="area-training">
+<div class="train-shell">
+  <aside class="side-bar" id="side-bar"></aside>
+  <main class="train-main">
+    <div class="page-head">
+      <div class="head-text">
+        <a href="dashboard.html" class="back-link">← Dashboard</a>
+        <h1 class="title">Improve the detector</h1>
+        <div class="subtitle">The detector finds Ball, Referee, Player and Hoop in every frame. Six steps, top to bottom.</div>
+      </div>
+      <div class="head-side"><div class="head-counts" id="head-counts"></div></div>
+    </div>
+
+    <section class="card status-card">
+      <span class="big" id="status-step">…</span>
+      <span id="status-block" class="line"></span>
+    </section>
+
+    <div class="step-rows" id="steps"></div>
+
+    <div class="footer-line">When step 6 is done the list resets to step 1 for the next batch of pictures. Nothing here changes a game's stats until you press Use this one. <a href="versions.html">All versions and models →</a></div>
+  </main>
+</div>
+<script src="app.js"></script>
+<script src="improve.js"></script>
+</body>
+</html>

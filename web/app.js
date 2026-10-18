@@ -290,11 +290,9 @@ function renderHeader(active, options) {
 
 // The tabs; the old training screens stay reachable under "Training (old)" until the Improve page replaces them.
 const SIDEBAR_TABS = [['dashboard', 'Dashboard', 'dashboard.html'], ['games', 'Games', 'games.html'],
-                      ['process', 'Process a game', 'process.html'], ['improve', 'Improve the detector', 'train.html']];
-const SIDEBAR_OLD = [['upload', '1 · Upload', 'upload.html'], ['annotate', '2 · Annotate', 'annotate.html'],
-                     ['dataset', '3 · Dataset', 'dataset.html'], ['train', '4 · Train', 'models.html#train'],
-                     ['models', '5 · Models', 'models.html']];
-const SIDEBAR_ALIASES = { overview: 'improve' };
+                      ['process', 'Process a game', 'process.html'], ['improve', 'Improve the detector', 'improve.html']];
+// The option screens (Upload, Annotate, Dataset, Train and Models) are reached from the Improve page's steps only.
+const SIDEBAR_ALIASES = { overview: 'improve', upload: 'improve', annotate: 'improve', dataset: 'improve', train: 'improve', models: 'improve' };
 
 // Fill <aside id="side-bar"> with the logo, the tabs, the old screens, the detector box and "← Start page".
 // `active` marks the tab ('dashboard' | 'games' | 'process' | 'improve' | 'overview' | 'upload' | ...).
@@ -305,10 +303,9 @@ function renderSidebar(active) {
   const tabs = SIDEBAR_TABS.map(function (link) {
     return el('a', { href: link[2], class: 'step-link' + (link[0] === current ? ' active' : '') }, link[1]);
   });
-  const old = el('div', { class: 'side-sub' }, [el('div', { class: 'side-sub-title' }, 'Training (old)')].concat(
-    SIDEBAR_OLD.map(function (link) {
-      return el('a', { href: link[2], class: 'step-link sub' + (link[0] === current ? ' active' : '') }, link[1]);
-    })));
+  // On an option screen, a small line under the tabs says where it belongs.
+  const old = current === 'improve' && active !== 'improve' && active !== 'overview'
+    ? el('div', { class: 'side-sub' }, [el('a', { href: 'improve.html', class: 'step-link sub' }, '← back to the six steps')]) : el('div', {});
   const box = el('div', { class: 'side-box', id: 'detector-box' }, [
     el('div', { class: 'side-box-label' }, 'DETECTOR IN USE'),
     el('div', { class: 'side-box-value' }, '…'),

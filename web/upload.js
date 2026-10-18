@@ -196,6 +196,9 @@ async function load() {
 }
 
 byId('get-pictures').addEventListener('click', function () { tryToast(getPictures); });
-byId('job-stop').addEventListener('click', function () { tryToast(stopJob); });
+byId('job-stop').addEventListener('click', function () {
+  if (!window.confirm('Stop taking pictures? The pictures already taken keep their boxes; the ones not reached yet have no boxes to confirm until you run this again.')) return;
+  tryToast(stopJob);
+});
 byId('refresh').addEventListener('click', function () { tryToast(load); });
 tryToast(load);
