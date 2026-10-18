@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Games · Hoops Tracker</title>
+<style>
+  #season-groups td:first-child { font-weight: 700; }
+  #season-groups td { vertical-align: middle; }
+</style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="app.css">
@@ -15,20 +19,17 @@
   <div class="page-head">
     <div class="head-text">
       <h1 class="title">Games</h1>
-      <div class="subtitle" id="games-line">Every video in the clips folder, grouped by season.</div>
+      <div class="subtitle" id="games-line">Every game video you have added.</div>
     </div>
     <div class="head-side">
-      <input id="games-filter" class="input" type="search" placeholder="Find a game" aria-label="Find a game" style="min-height: 44px; min-width: 180px">
+      <div class="chips" id="chips">
+        <button type="button" data-filter="all" class="on">All</button>
+        <button type="button" data-filter="mine">Needs something from me</button>
+        <button type="button" data-filter="done">Has results</button>
+      </div>
       <button class="btn btn-outline" id="refresh" type="button">Refresh</button>
-      <a class="btn btn-outline" id="colab-open" href="https://colab.research.google.com/" target="_blank" rel="noopener">Open Colab ↗</a>
-      <button class="btn btn-red" id="add-game" type="button">Add a game</button>
+      <button class="btn btn-yellow" id="add-game" type="button">+ Add a game video</button>
     </div>
-  </div>
-
-  <div class="callout callout-grey">
-    <b>How a game gets processed.</b> 1 · Copy the video into the clips folder and press Add a game. 2 · Mark the court (Mark court on the row: about ten minutes of clicking).
-    3 · Press Run on Colab: the video and the court files go to your Google Drive. 4 · Open Colab and press Run all there; it works through every game in the inbox and the results come back here by themselves.
-    Stop the Colab runtime when its log says "Nothing to do".
   </div>
 
   <!-- "Add a game": the plain steps and the form that puts a video in a season (shared with the Season page) -->
@@ -68,6 +69,7 @@
   <div class="stack" id="season-groups" style="gap: 22px">
     <div class="hint">Reading the games...</div>
   </div>
+  <div class="small muted">Continue opens Process a game with that game already picked. Edit is the game's name, date and video file; a game that is processing cannot be edited.</div>
   </main>
 </div>
 <script src="app.js"></script>

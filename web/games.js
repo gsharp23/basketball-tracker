@@ -1,80 +1,93 @@
-/* The Games screen of the processing area: every video in the clips folder, grouped by season (the current
-   season first), with the state of each game and what to do next: Mark court, Run on Colab, Open, Progress.
-   Processing happens on Colab; this laptop only marks the court and moves files through Google Drive.
-   The rows and the "Add a game" panel are shared with the Season page: web/game_rows.js.
-   Data: GET /api/seasons/games. ?q=words filters the rows; ?game=<name> points at one game. */
+/* The Games library of Processing & training: every game video, grouped by season, with where each one is in
+   the five steps and what to do next. Data: GET /api/process/games. "Continue" opens Process a game with the
+   game picked; "+ Add a game video" and Edit use the shared panel in game_rows.js. */
 
-let reply = null;         // GET /api/seasons/games
+let reply = null;
+let filter = 'all';
 let searchText = (urlParam('q') || '').toLowerCase();
 
 renderSidebar('games');
-byId('games-filter').addEventListener('input', function () { searchText = byId('games-filter').value.trim().toLowerCase(); if (reply) showGroups(); });
 
 function matches(row) {
+  if (filter === 'mine' && (row.done || row.step === 5)) return false;
+  if (filter === 'done' && !row.done) return false;
   if (!searchText) return true;
-  return [row.opponent, row.stem, row.date, fmtDate(row.date), row.status_words].join(' ').toLowerCase().indexOf(searchText) >= 0;
+  return [row.opponent, row.stem, row.title, row.date, row.where].join(' ').toLowerCase().indexOf(searchText) >= 0;
 }
 
-// One card: the season's name, a link to its page, and its games as rows.
+function actions(row) {
+  const parts = [];
+  if (row.done) parts.push(el('a', { class: 'btn btn-outline btn-sm', href: withParams('game.html', { game: row.stem }) }, 'Open stats →'));
+  else parts.push(el('a', { class: 'btn btn-yellow btn-sm', href: withParams('process.html', { game: row.stem }) }, 'Continue →'));
+  if (row.running) parts.push(el('span', { class: 'small muted' }, 'processing'));
+  else parts.push(el('a', { href: '#', class: 'small', onclick: function (event) { event.preventDefault(); openAddPanel(row.stem); } }, 'Edit'));
+  return el('div', { class: 'actions' }, parts);
+}
+
+function gameRowLine(row) {
+  const where = el('td', {}, [row.where, row.drive && row.drive.stale ? el('div', { class: 'small text-orange' }, 'No word from Colab for a while') : null]);
+  return el('tr', { id: 'row-' + row.stem }, [
+    el('td', {}, row.title),
+    el('td', { class: row.date_is_guess ? 'muted' : null }, fmtDate(row.date)),
+    el('td', { class: 'muted' }, row.length_words + ' · ' + row.size_words),
+    where,
+    el('td', {}, actions(row))]);
+}
+
 function groupCard(group, rows) {
-  const title = group.id === 'unassigned'
-    ? el('h2', { class: 'card-title' }, 'Not in a season yet')
-    : el('h2', { class: 'card-title' }, [seasonName(group.name), group.current ? el('span', { class: 'chip chip-green', style: 'margin-left: 10px' }, 'Current') : null]);
-  const side = group.id === 'unassigned'
-    ? el('span', { class: 'card-note' }, 'Press Edit on a game to put it in a season')
-    : el('a', { href: withParams('season.html', { season: group.id }), class: 'card-link-right' }, 'Open the season →');
-  const table = el('table', { class: 'table', style: 'min-width: 640px' }, [
-    el('thead', {}, el('tr', {}, [el('th', {}, 'Date'), el('th', {}, 'Opponent'), el('th', {}, 'Result'), el('th', {}, 'Status'), el('th', {}, '')])),
-    el('tbody', {}, rows.map(function (row) { return gameRow(row, true); }))]);
+  const title = el('h2', { class: 'card-title' }, [seasonName(group.name), group.current ? el('span', { class: 'chip chip-green', style: 'margin-left: 10px' }, 'Current') : null]);
+  const table = el('table', { class: 'table', style: 'width: 100%' }, [
+    el('thead', {}, el('tr', {}, [el('th', {}, 'Game'), el('th', {}, 'Date'), el('th', {}, 'Video'), el('th', {}, 'Where it is'), el('th', {}, '')])),
+    el('tbody', {}, rows.map(gameRowLine))]);
   return el('section', { class: 'card', id: 'group-' + group.id }, [
-    el('div', { class: 'card-head' }, [title, side]),
-    rows.length ? el('div', { class: 'table-wrap' }, table)
-      : el('div', { class: 'hint' }, group.id === 'unassigned' ? 'Every game is in a season.' : 'No games in this season yet. Press "Add a game".')]);
+    el('div', { class: 'card-head' }, [title, el('span', { class: 'card-note' }, plural(rows.length, 'game'))]),
+    rows.length ? el('div', { class: 'table-wrap' }, table) : el('div', { class: 'hint' }, 'No games here yet.')]);
 }
 
 function showGroups() {
   const holder = byId('season-groups');
   holder.replaceChildren();
   let shown = 0;
-  reply.seasons.forEach(function (group) {
+  reply.groups.forEach(function (group) {
     const rows = group.games.filter(matches);
     shown += rows.length;
-    // While searching, a season with no matching game is left out.
-    if (!searchText || rows.length) holder.appendChild(groupCard(group, rows));
+    if (rows.length || (filter === 'all' && !searchText)) holder.appendChild(groupCard(group, rows));
   });
-  const loose = reply.unassigned.filter(matches);
-  shown += loose.length;
-  if (loose.length || (!searchText && !reply.games_total)) holder.appendChild(groupCard({ id: 'unassigned' }, loose));
   if (!reply.games_total) {
-    holder.appendChild(el('div', { class: 'callout callout-grey' },
-      'No videos in the clips folder yet. Press "Add a game" to see where to copy one.'));
-  } else if (searchText && !shown) {
-    holder.appendChild(el('div', { class: 'hint' }, 'No game matches "' + searchText + '".'));
+    holder.appendChild(el('div', { class: 'callout callout-grey' }, 'No game video yet. Press "+ Add a game video" to see where to copy one.'));
+  } else if (!shown) {
+    holder.appendChild(el('div', { class: 'hint' }, filter === 'mine' ? 'Nothing needs you right now.' : filter === 'done' ? 'No game has results yet.' : 'No game matches "' + searchText + '".'));
   }
-  byId('games-line').textContent = reply.games_total
-    ? plural(reply.games_total, 'game') + ' in the clips folder, grouped by season.' + (reply.busy ? ' ' + reply.busy : '')
-    : 'Every video in the clips folder, grouped by season.';
-  // ?game=<name>: point at that game's row.
+  byId('games-line').textContent = 'Every game video you have added. ' + plural(reply.games_total, 'game') + ' · ' + plural(reply.seasons_total, 'season') + '.' + (reply.busy ? ' ' + reply.busy : '');
   const wanted = urlParam('game');
   const row = wanted && byId('row-' + wanted);
   if (row) { row.classList.add('hilite'); row.scrollIntoView({ block: 'center' }); }
 }
 
 async function load() {
-  reply = await api('/api/seasons/games');
+  reply = await api('/api/process/games');
   GameRows.clipsFolder = reply.clips_folder;
-  if (reply.colab_url) byId('colab-open').href = reply.colab_url;
-  GameRows.defaultSeason = (reply.seasons.find(function (group) { return group.current; }) || { id: 'unassigned' }).id;
+  const current = reply.groups.find(function (group) { return group.current; });
+  GameRows.defaultSeason = current ? current.id : 'unassigned';
   showGroups();
+  if (reply.groups.some(function (group) { return group.games.some(function (row) { return row.running || row.step === 5; }); })) {
+    setTimeout(function () { load().catch(function () {}); }, 30000);
+  }
 }
 
 GameRows.reload = load;
 wireAddPanel();
 byId('add-game').addEventListener('click', function () { openAddPanel(urlParam('game')); });
 byId('refresh').addEventListener('click', function () { tryToast(load); });
-if (searchText) byId('games-filter').value = urlParam('q');
+byId('chips').addEventListener('click', function (event) {
+  const button = event.target.closest('button[data-filter]');
+  if (!button) return;
+  filter = button.dataset.filter;
+  for (const each of byId('chips').children) each.classList.toggle('on', each === button);
+  showGroups();
+});
 load().catch(function (problem) {
   toast(problem.message, 'bad');
   byId('season-groups').replaceChildren(el('div', { class: 'callout callout-red' }, problem.message));
 });
-if (location.hash === '#add') openAddPanel(urlParam('game'));
+if (location.hash === '#add' || location.hash === '#edit') openAddPanel(urlParam('game'));

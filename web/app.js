@@ -215,20 +215,41 @@ function renderHeader(active, options) {
   header.replaceChildren(brandBlock('GAME ANALYSIS'), nav, side);
 }
 
-/* ---- Processing and training: the sidebar (the Games screen first, then the five training steps) ---- */
+/* ---- Processing & training: the sidebar ---- */
 
-const SIDEBAR_LINKS = [['games', 'Games · process', 'games.html'], ['overview', 'Training overview', 'train.html'], ['upload', '1 · Upload', 'upload.html'],
-                       ['annotate', '2 · Annotate', 'annotate.html'], ['dataset', '3 · Dataset', 'dataset.html'],
-                       ['train', '4 · Train', 'models.html#train'], ['models', '5 · Models', 'models.html']];
+// The tabs; the old training screens stay reachable under "Training (old)" until the Improve page replaces them.
+const SIDEBAR_TABS = [['dashboard', 'Dashboard', 'dashboard.html'], ['games', 'Games', 'games.html'],
+                      ['process', 'Process a game', 'process.html'], ['improve', 'Improve the detector', 'train.html']];
+const SIDEBAR_OLD = [['upload', '1 · Upload', 'upload.html'], ['annotate', '2 · Annotate', 'annotate.html'],
+                     ['dataset', '3 · Dataset', 'dataset.html'], ['train', '4 · Train', 'models.html#train'],
+                     ['models', '5 · Models', 'models.html']];
+const SIDEBAR_ALIASES = { overview: 'improve' };
 
-// Fill <aside id="side-bar"> with the logo, the five steps and "← Start page". `active` marks the step.
+// Fill <aside id="side-bar"> with the logo, the tabs, the old screens, the detector box and "← Start page".
+// `active` marks the tab ('dashboard' | 'games' | 'process' | 'improve' | 'overview' | 'upload' | ...).
 function renderSidebar(active) {
   const aside = document.getElementById('side-bar');
   if (!aside) return;
-  const links = SIDEBAR_LINKS.map(function (link) {
-    return el('a', { href: link[2], class: 'step-link' + (link[0] === active ? ' active' : '') }, link[1]);
+  const current = SIDEBAR_ALIASES[active] || active;
+  const tabs = SIDEBAR_TABS.map(function (link) {
+    return el('a', { href: link[2], class: 'step-link' + (link[0] === current ? ' active' : '') }, link[1]);
   });
-  aside.replaceChildren(brandBlock('PROCESSING & TRAINING'), ...links, el('div', { class: 'grow' }),
+  const old = el('div', { class: 'side-sub' }, [el('div', { class: 'side-sub-title' }, 'Training (old)')].concat(
+    SIDEBAR_OLD.map(function (link) {
+      return el('a', { href: link[2], class: 'step-link sub' + (link[0] === current ? ' active' : '') }, link[1]);
+    })));
+  const box = el('div', { class: 'side-box', id: 'detector-box' }, [
+    el('div', { class: 'side-box-label' }, 'DETECTOR IN USE'),
+    el('div', { class: 'side-box-value' }, '…'),
+    el('div', { class: 'side-box-line' }, '')]);
+  api('/api/process/detector').then(function (info) {
+    box.children[1].textContent = info.label || info.name;
+    box.children[2].textContent = info.built_words + ' · ' + info.score_words;
+  }).catch(function () {
+    box.children[1].textContent = '—';
+    box.children[2].textContent = 'Restart the dashboard to see it.';
+  });
+  aside.replaceChildren(brandBlock('PROCESSING & TRAINING'), ...tabs, old, box, el('div', { class: 'grow' }),
                         el('a', { href: 'index.html', class: 'start-link' }, '← Start page'));
 }
 

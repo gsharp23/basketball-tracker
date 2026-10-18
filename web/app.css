@@ -36,6 +36,7 @@
   --side: #22262e;
   --side-on: #343a45;
   --side-muted: #9aa3b2;
+  --orange: #a3400f;
   --accent: var(--red);
   --font: 'Barlow', 'Segoe UI', Arial, sans-serif;
   --font-condensed: 'Barlow Condensed', 'Arial Narrow', 'Franklin Gothic Medium', Impact, sans-serif;
@@ -488,3 +489,45 @@ pre.log { font-size: 13px; line-height: 1.35; background: var(--bg); padding: 10
 
 /* A smaller chip beside a name (the schedule's Tournament mark). */
 .chip-sm { font-size: 11px; padding: 1px 7px; margin-left: 8px; vertical-align: middle; }
+
+/* ================================ Processing & training: sidebar extras and the step rows ================================ */
+.side-bar .step-link.active { background: #333439; }
+.side-sub { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.side-sub-title { font-size: 11px; letter-spacing: 2px; color: var(--side-muted); padding: 8px 14px 4px; text-transform: uppercase; }
+.side-bar .step-link.sub { padding: 8px 14px 8px 26px; font-size: 14px; font-weight: 500; color: var(--side-muted); }
+.side-bar .step-link.sub.active { color: #ffffff; }
+.side-box { margin: 14px 8px 0; padding: 12px 14px; border: 1px solid #3a3f4a; border-radius: 8px; }
+.side-box-label { font-size: 11px; letter-spacing: 2px; color: var(--side-muted); }
+.side-box-value { font-weight: 800; font-size: 17px; color: #ffffff; margin-top: 4px; }
+.side-box-line { font-size: 12px; color: var(--side-muted); margin-top: 2px; }
+.text-orange { color: var(--orange); font-weight: 600; }
+.text-green { color: var(--green); font-weight: 600; }
+.step-rows { display: flex; flex-direction: column; gap: 10px; }
+.step-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 16px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+.step-row.current { outline: 2px solid var(--yellow); outline-offset: -1px; }
+.step-row.locked { background: #fafaf8; }
+.step-row .circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; background: var(--ink); color: #ffffff; }
+.step-row.done .circle { background: var(--green-bright); }
+.step-row.locked .circle { background: #d8dadf; color: #6b6f78; }
+.step-row .step-title { font-family: var(--font-condensed); text-transform: uppercase; font-weight: 800; font-size: 20px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step-row .here { font-family: var(--font-body, inherit); font-size: 11px; letter-spacing: 2px; background: var(--yellow); color: var(--ink); padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+.step-row .step-text { font-size: 14px; color: var(--muted); margin-top: 3px; }
+.step-row .step-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 180px; text-align: right; }
+.step-row .locked-reason { font-size: 13px; color: var(--orange); font-weight: 600; max-width: 260px; }
+.btn-yellow { background: var(--yellow); color: var(--ink); border-color: var(--yellow); font-weight: 800; }
+.btn-yellow:hover { background: #e9c01a; }
+.btn.greyed { background: #e6e8ec; color: #8a8f99; border-color: #e6e8ec; cursor: not-allowed; }
+.status-card { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.status-card .big { font-family: var(--font-condensed); font-weight: 800; font-size: 24px; text-transform: uppercase; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips button { border: 1px solid var(--line-strong); background: var(--card); border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.chips button.on { background: var(--ink); color: #ffffff; border-color: var(--ink); }
+.dash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+.dash-card .eyebrow-small { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.dash-card .status { font-weight: 800; font-size: 20px; margin-top: 6px; }
+.dash-card .line { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.score-chart { width: 100%; height: 220px; }
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bars .bar-row { display: grid; grid-template-columns: 70px 1fr 48px; gap: 10px; align-items: center; font-size: 14px; }
+.bars .bar { height: 10px; background: #eef0f3; border-radius: 999px; overflow: hidden; }
+.bars .bar > span { display: block; height: 100%; background: var(--yellow); }
