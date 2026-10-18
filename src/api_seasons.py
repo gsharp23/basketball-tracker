@@ -10,8 +10,9 @@
                                           the same on the "schedule" rows (a fixture without a video: "No video"),
                                           and the clips folder as Windows names it ("unassigned" is allowed)
     GET /api/seasons/{id}/game/{stem}     one game row again, polled while a run is going
-    GET /api/seasons/{id}/players         the Players screen: season totals per player (roster players included),
-                                          every player's game lines and the season's shot marks
+    GET /api/seasons/{id}/players         the Players screen: season totals per player (roster players included, each
+                                          with its squad), "unmatched" (numbers no roster player explains), the
+                                          roster (players, squads, merges), every player's game lines and the shot marks
 
 Writing goes through the shared routes of dash_api.py: PUT /api/games/{stem}/info (assign a game, the
 score), PUT /api/seasons/{id} (the roster, current), POST /api/seasons (a new season), POST /api/jobs/start
@@ -201,14 +202,14 @@ def season_game(season_id: str, stem: str):
 
 # ---------------------------------------------------------------- the Players screen
 
-def game_lines(rows, names):
+def game_lines(rows, names, merges=None):
     """{jersey number: [one line per game the player was seen or shot in]}, oldest game first."""
     lines = {}
     for row in rows:
         who = library.sides(row["stem"])
         if not who["our_team"]:
             continue
-        players, _ = library.player_rows(row["stem"], who["our_team"], names)
+        players, _ = library.player_rows(row["stem"], who["our_team"], names, merges)
         for player in players:
             lines.setdefault(player["number"], []).append({
                 "stem": row["stem"], "date": row["date"], "opponent": row["opponent"], "result": row["result"],
@@ -221,9 +222,12 @@ def game_lines(rows, names):
 @router.get("/{season_id}/players")
 def season_players(season_id: str):
     summary = summary_or_400(season_id)
-    names = summary["season"]["roster"]["players"]
+    roster = summary["season"]["roster"]
+    names, merges = roster["players"], roster.get("merges") or {}
     players = list(summary["players"])
     seen = {player["number"] for player in players}
+    # The numbers the reader saw that no roster player explains: shown only when the coach asks.
+    unmatched = [player for player in library.season_players(summary["games"], names, merges, with_unmatched=True) if player["unmatched"]]
     # A roster player who has not shown up in any game yet is listed too, so the whole roster is on the page.
     for number, name in names.items():
         if number not in seen:
@@ -231,6 +235,9 @@ def season_players(season_id: str):
                             "field_goals": {"made": 0, "tried": 0, "pct": None}, "threes": {"made": 0, "tried": 0, "pct": None},
                             "free_throws": {"made": 0, "tried": 0, "pct": None}, "seen_s": 0, "distance_ft": 0,
                             "distance_per_game_ft": None})
-    return {"season": summary["season"], "players": players, "lines": game_lines(summary["games"], names),
+    for player in players:
+        player["squad"] = (roster.get("squads") or {}).get(player["number"], "both")
+    return {"season": summary["season"], "players": players, "unmatched": unmatched, "roster": roster,
+            "lines": game_lines(summary["games"], names, merges),
             "marks": summary["shots"]["marks"], "court": summary["shots"]["court"],
             "games_count": summary["games_count"], "provisional": summary["provisional"]}

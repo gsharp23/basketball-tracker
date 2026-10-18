@@ -1,15 +1,14 @@
-/* The Players page: the current season's players with their season totals; a click on a player shows
-   that player's season shot map and one line per game. Numbers come from GET /api/seasons/<id>/players. */
+/* The Players page: our players this season in two tables, Black and Red (a player on both squads is in both),
+   with season totals; a click on a name opens the player's own page. "Show unmatched numbers" lists the numbers
+   the reader saw that no roster player explains; Edit changes a player's name, number or squad, or marks a number
+   as not a real player and merges its minutes and points into someone. Data: GET /api/seasons/<id>/players. */
 
 let season = null;
 let page = null;          // the reply of /api/seasons/<id>/players
-let chosen = null;        // the jersey number shown in the panel
+let editing = null;       // the player row being edited
 let searchText = '';
 
 renderHeader('players', { search: function (text) { searchText = text.toLowerCase(); showPlayers(); } });
-
-
-/* ---- the season chooser in the title row ---- */
 
 async function fillSeasonPick() {
   const reply = await api('/api/seasons');
@@ -17,21 +16,29 @@ async function fillSeasonPick() {
   pick.replaceChildren.apply(pick, reply.seasons.map(function (row) {
     return el('option', { value: row.id }, seasonName(row.name) + (row.current ? ' (current)' : ''));
   }));
-  if (reply.unassigned) pick.appendChild(el('option', { value: 'unassigned' }, 'Unassigned games'));
   pick.value = season.id;
 }
-
-/* ---- the table ---- */
 
 function shots(pair) {
   if (!pair.tried) return el('span', { class: 'muted' }, '—');
   return el('span', {}, [fmtMadeTried(pair), el('span', { class: 'small muted' }, ' ' + fmtPct(pair.pct))]);
 }
 
+function editLink(player) {
+  return el('a', { href: '#', class: 'small', onclick: function (event) { event.preventDefault(); openEdit(player); } }, 'Edit');
+}
+
+function nameCell(player) {
+  if (!player.name) {
+    return el('td', {}, [el('span', { class: 'muted' }, 'No name in the roster'), ' ', el('a', { href: 'season.html#roster', class: 'small' }, 'Roster')]);
+  }
+  return el('td', {}, el('a', { class: 'name-link', href: withParams('player.html', { season: season.id, number: player.number }) }, player.name));
+}
+
 function playerRow(player) {
-  const row = el('tr', { class: player.number === chosen ? 'hilite' : null, onclick: function () { choose(player.number); } }, [
+  return el('tr', {}, [
     el('td', { class: 'num' }, player.number),
-    el('td', { class: 'strong' }, player.name || el('span', { class: 'muted' }, 'No name in the roster')),
+    nameCell(player),
     el('td', {}, String(player.games)),
     el('td', { class: 'num' }, String(player.points)),
     el('td', {}, player.points_per_game === null ? '—' : player.points_per_game.toFixed(1)),
@@ -39,8 +46,19 @@ function playerRow(player) {
     el('td', {}, shots(player.threes)),
     el('td', {}, shots(player.free_throws)),
     el('td', {}, player.seen_s ? fmtClock(player.seen_s) : '—'),
-    el('td', {}, player.distance_ft ? fmtMiles(player.distance_ft) : '—')]);
-  return row;
+    el('td', {}, player.distance_ft ? fmtMiles(player.distance_ft) : '—'),
+    el('td', {}, editLink(player))]);
+}
+
+function unmatchedRow(player) {
+  return el('tr', { class: 'unmatched' }, [
+    el('td', { class: 'num' }, player.number),
+    el('td', {}, (player.read_as || []).length ? 'also ' + player.read_as.join(', ') : ''),
+    el('td', {}, String(player.games)),
+    el('td', { class: 'num' }, String(player.points)),
+    el('td', {}, player.seen_s ? fmtClock(player.seen_s) : '—'),
+    el('td', {}, player.distance_ft ? fmtMiles(player.distance_ft) : '—'),
+    el('td', {}, editLink(player))]);
 }
 
 function matches(player) {
@@ -49,70 +67,81 @@ function matches(player) {
 }
 
 function showPlayers() {
-  const body = byId('player-rows'), note = byId('players-note');
   const players = page.players.filter(matches);
-  body.replaceChildren.apply(body, players.map(playerRow));
-  note.hidden = players.length > 0;
-  if (!players.length) {
-    note.textContent = page.players.length ? 'No player matches "' + searchText + '".'
-      : 'No players yet. Fill in the roster (the Roster button on the season page) and process a game: every player whose number was read on our team appears here.';
+  [['black', 'black-rows', 'black-note'], ['red', 'red-rows', 'red-note']].forEach(function (which) {
+    const mine = players.filter(function (p) { return (p.squad || 'both') === which[0] || (p.squad || 'both') === 'both'; });
+    const body = byId(which[1]);
+    body.replaceChildren.apply(body, mine.map(playerRow));
+    byId(which[2]).textContent = plural(mine.length, 'player');
+    if (!mine.length) body.appendChild(el('tr', {}, el('td', { colspan: 11, class: 'muted' }, page.players.length ? 'No player on this squad yet: set the squad on the Roster.' : 'No players yet: fill in the Roster and process a game.')));
+  });
+  const show = byId('show-unmatched').checked;
+  byId('unmatched-card').hidden = !show;
+  if (show) {
+    const body = byId('unmatched-rows');
+    body.replaceChildren.apply(body, page.unmatched.map(unmatchedRow));
+    if (!page.unmatched.length) body.appendChild(el('tr', {}, el('td', { colspan: 7, class: 'muted' }, 'Every number the reader saw matches a roster player.')));
   }
 }
 
-/* ---- one player: the season shot map and the game lines ---- */
+/* ---- Edit a player ---- */
 
-function choose(number) {
-  chosen = number;
-  showPlayers();
-  const player = page.players.find(function (row) { return row.number === number; });
-  if (!player) return;
-  const marks = page.marks.filter(function (mark) { return String(mark.number) === String(number); });
-  const lines = page.lines[number] || [];
-  const court = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  court.setAttribute('class', 'court');
-  court.setAttribute('role', 'img');
-  court.setAttribute('aria-label', 'Where this player scored from this season');
-  drawHalfCourt(court, page.court, marks, '#d81e27');
-  const areas = pointsByArea(marks);
-  const lineRows = lines.map(function (line) {
-    return el('tr', {}, [
-      el('td', {}, fmtDate(line.date)),
-      el('td', { class: 'strong' }, el('a', { href: withParams('game.html', { game: line.stem }) }, line.opponent || line.stem)),
-      el('td', { class: 'num' }, String(line.points)),
-      el('td', {}, shots(line.field_goals)),
-      el('td', {}, shots(line.threes)),
-      el('td', {}, line.seen_s ? fmtClock(line.seen_s) : '—'),
-      el('td', {}, line.distance_ft ? fmtFeet(line.distance_ft) : '—')]);
+function openEdit(player) {
+  editing = player;
+  const panel = byId('edit-panel');
+  panel.hidden = false;
+  byId('edit-title').textContent = 'Edit No. ' + player.number + (player.name ? ' · ' + player.name : '');
+  byId('edit-name').value = player.name || '';
+  byId('edit-number').value = player.number;
+  byId('edit-squad').value = player.squad || 'both';
+  byId('edit-not-real').checked = !!player.unmatched && page.roster.merges[player.number] !== undefined;
+  const merge = byId('edit-merge');
+  merge.replaceChildren(el('option', { value: '' }, 'nobody (just hide it)'));
+  Object.keys(page.roster.players).sort(function (a, b) { return Number(a) - Number(b); }).forEach(function (n) {
+    if (n !== player.number) merge.appendChild(el('option', { value: n }, 'No. ' + n + (page.roster.players[n] ? ' ' + page.roster.players[n] : '')));
   });
-  byId('player-panel').replaceChildren(
-    el('div', { class: 'player-head' }, [
-      el('span', { class: 'lead-number' }, number),
-      el('div', {}, [el('div', { class: 'name' }, player.name || 'No. ' + number),
-                     el('div', { class: 'small muted' }, plural(player.games, 'game') + ' · ' + plural(marks.length, 'shot') + ' tagged')])]),
-    el('div', { class: 'card-head' }, [el('h3', { class: 'card-title-small' }, 'Season shot map'), el('span', { class: 'card-note' }, String(player.points) + ' points')]),
-    court,
-    el('div', { class: 'area-list' }, areas.length
-      ? areas.map(function (area) { return el('div', {}, [el('span', {}, area.area), el('span', { class: 'value' }, plural(area.points, 'point'))]); })
-      : [el('div', { class: 'hint' }, 'No made shot tagged for this player yet.')]),
-    el('div', { class: 'hint' }, marks.length ? undrawnNote(marks) : ''),
-    el('h3', { class: 'card-title-small' }, 'Game by game'),
-    lines.length
-      ? el('div', { class: 'table-wrap' }, el('table', { class: 'table lines-table' }, [
-          el('thead', {}, el('tr', {}, [el('th', {}, 'Date'), el('th', {}, 'Opponent'), el('th', {}, 'Pts'), el('th', {}, 'FG'), el('th', {}, '3PT'), el('th', {}, 'Seen'), el('th', {}, 'Distance')])),
-          el('tbody', {}, lineRows)]))
-      : el('div', { class: 'hint' }, 'This player has not been seen in a processed game of this season yet.'));
+  merge.value = page.roster.merges[player.number] || '';
+  byId('edit-merge-field').hidden = !byId('edit-not-real').checked;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  byId('edit-name').focus();
+}
+
+async function saveEdit(event) {
+  event.preventDefault();
+  const roster = JSON.parse(JSON.stringify(page.roster));
+  const oldNumber = editing.number, newNumber = byId('edit-number').value.trim();
+  const notReal = byId('edit-not-real').checked;
+  if (notReal) {
+    delete roster.players[oldNumber];
+    delete roster.squads[oldNumber];
+    roster.merges[oldNumber] = byId('edit-merge').value;
+  } else {
+    if (!newNumber) { toast('A player needs a number.', 'bad'); return; }
+    if (newNumber !== oldNumber && roster.players[newNumber] !== undefined) { toast('Number ' + newNumber + ' is already on the roster.', 'bad'); return; }
+    if (newNumber !== oldNumber) {
+      delete roster.players[oldNumber];
+      delete roster.squads[oldNumber];
+      if (editing.games) roster.merges[oldNumber] = newNumber;          // the stats read under the old number follow the player
+    }
+    delete roster.merges[newNumber];
+    roster.players[newNumber] = byId('edit-name').value.trim();
+    roster.squads[newNumber] = byId('edit-squad').value;
+  }
+  const saved = await tryToast(function () { return putJSON('/api/seasons/' + encodeURIComponent(season.id), { roster: roster }); });
+  if (!saved) return;
+  toast('Saved.', 'good');
+  byId('edit-panel').hidden = true;
+  await load();
 }
 
 /* ---- loading ---- */
 
 async function load() {
   page = await api('/api/seasons/' + encodeURIComponent(season.id) + '/players');
-  byId('players-title').textContent = 'Players · ' + seasonName(page.season.name);
   document.title = 'Players · ' + seasonName(page.season.name) + ' · Hoops Tracker';
   byId('provisional-note').hidden = !page.provisional;
+  byId('roster-link').href = withParams('season.html', { season: season.id }) + '#roster';
   showPlayers();
-  if (page.players.length) choose(page.players[0].number);
-  else byId('player-panel').replaceChildren(el('div', { class: 'hint' }, 'Choose a player in the table once there are some.'));
 }
 
 async function start() {
@@ -125,7 +154,11 @@ byId('season-pick').addEventListener('change', function () {
   rememberSeason(byId('season-pick').value);
   location.href = withParams('players.html', { season: byId('season-pick').value });
 });
+byId('show-unmatched').addEventListener('change', showPlayers);
+byId('edit-close').addEventListener('click', function () { byId('edit-panel').hidden = true; });
+byId('edit-not-real').addEventListener('change', function () { byId('edit-merge-field').hidden = !byId('edit-not-real').checked; });
+byId('edit-form').addEventListener('submit', saveEdit);
 start().catch(function (problem) {
   toast(problem.message, 'bad');
-  byId('player-rows').replaceChildren(el('tr', {}, el('td', { colspan: 10, class: 'muted' }, problem.message)));
+  byId('black-rows').replaceChildren(el('tr', {}, el('td', { colspan: 11, class: 'muted' }, problem.message)));
 });

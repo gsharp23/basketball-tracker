@@ -423,6 +423,7 @@ async function start() {
   await fillSeasonPicker();
   await loadSummary();
   if (location.hash === '#add') openFixturePanel(null);
+  if (location.hash === '#roster') openRosterPanel();
 }
 
 // The shared rows and panel (game_rows.js): how this page reloads, and what happens after "Save the game".

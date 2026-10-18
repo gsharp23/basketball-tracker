@@ -44,6 +44,7 @@ Where the numbers come from
     names                               the season's roster (player names never leave this laptop)
 """
 import argparse
+import copy
 import datetime
 import json
 import re
@@ -52,6 +53,7 @@ import config
 import dash_common
 import main
 import possessions
+import roster_snap
 import shots
 
 UNASSIGNED = "unassigned"           # the season id of a game that is not in any season
@@ -88,14 +90,29 @@ def play_types_file():
     return config.DATA_DIR / "_dashboard" / "play_types.json"
 
 
+_read_cache = {}          # path -> (mtime_ns, size, contents): the result files are read once per change, not per screen
+
 def read_file(path, default):
-    """A JSON file, or `default` when it is missing. A damaged file is a Problem, not a crash."""
-    if not path.exists():
-        return default
+    """A JSON file, or `default` when it is missing. A damaged file is a Problem, not a crash.
+
+    Kept in memory until the file changes (its time or size): a season screen asks for the same teams.json
+    and stats.json many times over, and on this laptop every read of them was showing."""
     try:
-        return config.load_json(path)
+        stat = path.stat()
+    except OSError:
+        return default
+    key, stamp = str(path), (stat.st_mtime_ns, stat.st_size)
+    cached = _read_cache.get(key)
+    if cached and cached[0] == stamp:
+        return copy.deepcopy(cached[1])
+    try:
+        contents = config.load_json(path)
     except SystemExit as stop:
         raise Problem(str(stop))
+    if len(_read_cache) > 200:
+        _read_cache.clear()
+    _read_cache[key] = (stamp, contents)
+    return copy.deepcopy(contents)
 
 
 def write_file(path, data):
@@ -137,12 +154,14 @@ def clean_season(saved):
     roster = saved.get("roster") if isinstance(saved.get("roster"), dict) else {}
     players = roster.get("players") if isinstance(roster.get("players"), dict) else {}
     squads = roster.get("squads") if isinstance(roster.get("squads"), dict) else {}
+    merges = roster.get("merges") if isinstance(roster.get("merges"), dict) else {}
     schedule = saved.get("schedule") if isinstance(saved.get("schedule"), list) else []
     return {"name": str(saved.get("name") or "").strip() or "Season", "start": str(saved.get("start") or ""),
             "current": bool(saved.get("current")),
             "roster": {"name": str(roster.get("name") or ""),
                        "players": {str(number): str(name) for number, name in players.items()},
-                       "squads": {str(number): squad for number, squad in squads.items() if squad in SQUADS and str(number) in players}},
+                       "squads": {str(number): squad for number, squad in squads.items() if squad in SQUADS and str(number) in players},
+                       "merges": {str(number): str(target or "") for number, target in merges.items()}},
             "schedule": [row for row in (clean_fixture(entry) for entry in schedule) if row["id"]]}
 
 
@@ -190,7 +209,8 @@ def season_or_problem(seasons, season_id):
 
 
 def check_roster(roster):
-    """A roster as the page sends it, checked: {"name", "players": {number: name}, "squads": {number: black | red | both}}.
+    """A roster as the page sends it, checked: {"name", "players": {number: name}, "squads": {number: black | red | both},
+    "merges": {number read: roster number it really is, or "" for "not a real player"}}.
     Problem when a number is not one. A player with no squad given is "both"."""
     roster = roster if isinstance(roster, dict) else {}
     players, squads = {}, {}
@@ -206,7 +226,12 @@ def check_roster(roster):
         players[number] = name
         squad = str(given.get(number) or given.get(str(int(number))) or "both").lower()
         squads[number] = squad if squad in SQUADS else "both"
-    return {"name": str(roster.get("name") or "").strip()[:60], "players": players, "squads": squads}
+    merges = {}
+    for number, target in (roster.get("merges") if isinstance(roster.get("merges"), dict) else {}).items():
+        number, target = str(number).strip(), str(target or "").strip()
+        if number.isdigit() and (target == "" or target in players):
+            merges[number] = target                    # "" = not a real player: hidden, nothing merged
+    return {"name": str(roster.get("name") or "").strip()[:60], "players": players, "squads": squads, "merges": merges}
 
 
 def create_season(name, start=None, roster=None, current=False):
@@ -298,6 +323,13 @@ def roster_for(season_id):
     seasons = load_seasons()["seasons"]
     row = seasons.get(season_id) if season_id else None
     return dict(row["roster"]["players"]) if row else {}
+
+
+def merges_for(season_id):
+    """The season roster's merges ({number read: roster number or ""}; {} when there is no season)."""
+    seasons = load_seasons()["seasons"]
+    row = seasons.get(season_id) if season_id else None
+    return dict(row["roster"].get("merges") or {}) if row else {}
 
 
 # ---------------------------------------------------------------- teams (the opponents)
@@ -1023,34 +1055,104 @@ def score_tiles(shot_list):
             "free_throws": made_tried([shot for shot in shot_list if shot.get("kind") == "free throw"])}
 
 
-def player_rows(stem, label, names):
+def jersey_votes(stem):
+    """{tracking id: {number read: looks}} from jerseys.json, for the snap."""
+    jerseys = read_file(config.DATA_DIR / stem / "jerseys.json", {})
+    tracks = jerseys.get("tracks") if isinstance(jerseys, dict) and isinstance(jerseys.get("tracks"), dict) else {}
+    return {str(key): (entry.get("votes") or {}) for key, entry in tracks.items() if isinstance(entry, dict)}
+
+
+def roster_map(stem, label, names, merges, rows_numbers):
+    """Where each number read on our team belongs: {number read: roster number, or None for unmatched}.
+
+    The coach's merges come first (a number that is really another player, or "" = not a real player, mapped
+    to None but remembered in "hidden"). Then a number that is not on the roster is snapped (roster_snap) using
+    the votes of the tracking ids behind it. With no roster, every number stays itself.
+    Returns (mapping, hidden set, reasons {number: "on roster" | "snapped" | "unmatched" | "merged" | "hidden"})."""
+    roster = set(names)
+    mapping, hidden, reasons = {}, set(), {}
+    votes_by_track = jersey_votes(stem) if roster else {}
+    for number, track_ids in rows_numbers.items():
+        if number in merges:
+            target = merges[number]
+            if target:
+                mapping[number], reasons[number] = target, "merged"
+            else:
+                mapping[number], reasons[number] = None, "hidden"
+                hidden.add(number)
+            continue
+        if not roster or number in roster:
+            mapping[number], reasons[number] = number, "on roster"
+            continue
+        votes = {}
+        for track_id in track_ids:
+            for read, count in votes_by_track.get(str(track_id), {}).items():
+                votes[str(read)] = votes.get(str(read), 0) + int(count or 0)
+        target, why = roster_snap.snap(number, votes, roster)
+        mapping[number], reasons[number] = target, why
+    return mapping, hidden, reasons
+
+
+def player_rows(stem, label, names, merges=None, with_unmatched=False):
     """The players table of one colour group: the stats' time and distance, the tagged shots' points, the roster's names.
 
     Each row: {"number", "name", "points", "field_goals", "threes", "free_throws" (each {made, tried, pct}),
-    "seen_s", "on_map_s", "distance_ft", "paint_pct", "two_places", "tracking_ids"}, most points first.
+    "seen_s", "on_map_s", "distance_ft", "paint_pct", "two_places", "tracking_ids", "read_as" (the numbers the
+    reader saw that were folded into this row, when any), "unmatched"}, most points first.
     A shooter with a number but no stats row (the stats are not made yet) still gets a row.
+    On our team (names given) a number the reader got slightly wrong is folded into its roster player
+    (roster_map); one no roster number explains is unmatched: left out unless with_unmatched, then flagged.
+    merges: the season roster's merges ({number: roster number or ""}); by default none.
     Returns (rows, how many of that group's tags never got a number).
     """
     stats = stats_of(stem)
+    merges = merges or {}
     by_number = {}
     for shot in shots_of(stem):
         if shot.get("team") == label and shot.get("number") is not None:
             by_number.setdefault(str(shot["number"]), []).append(shot)
-    rows, seen_numbers = [], set()
+    stat_rows = {}
     for row in stats.get("players", []):
         if row.get("team") != label or not row.get("identified"):
             continue
-        number = str(row["number"])
-        seen_numbers.add(number)
-        rows.append(dict(score_tiles(by_number.get(number, [])), number=number, name=names.get(number, ""),
-                         seen_s=row.get("seen_s"), on_map_s=row.get("on_map_s"), distance_ft=row.get("distance_ft"),
-                         paint_pct=row.get("paint_pct"), two_places=bool(row.get("two_places_frames")),
-                         tracking_ids=row.get("tracking_ids", [])))
-    for number, mine in by_number.items():
-        if number not in seen_numbers:
-            rows.append(dict(score_tiles(mine), number=number, name=names.get(number, ""), seen_s=None, on_map_s=None,
-                             distance_ft=None, paint_pct=None, two_places=False, tracking_ids=[]))
-    rows.sort(key=lambda row: (-row["points"], -(row["seen_s"] or 0), int(row["number"])))
+        stat_rows[str(row["number"])] = row
+    numbers = {number: row.get("tracking_ids", []) for number, row in stat_rows.items()}
+    for number in by_number:
+        numbers.setdefault(number, [])
+    mapping, hidden, reasons = roster_map(stem, label, names, merges, numbers) if names else ({n: n for n in numbers}, set(), {})
+    folded = {}         # roster number (or the read, when unmatched) -> the row being built
+    for number in sorted(numbers, key=lambda n: (reasons.get(n) != "on roster", int(n) if n.isdigit() else 0)):
+        target = mapping.get(number, number)
+        unmatched = target is None and number not in hidden
+        if number in hidden:
+            continue
+        key = target if target is not None else number
+        row = folded.get(key)
+        stat = stat_rows.get(number)
+        if row is None:
+            row = folded[key] = {"number": key, "name": names.get(key, ""), "seen_s": None, "on_map_s": None, "distance_ft": None,
+                                 "paint_pct": None, "two_places": False, "tracking_ids": [], "read_as": [], "shots": [],
+                                 "unmatched": unmatched}
+        if number != key:
+            row["read_as"].append(number)
+        row["shots"] += by_number.get(number, [])
+        if stat:
+            seen_before = row["seen_s"] or 0
+            row["seen_s"] = seen_before + (stat.get("seen_s") or 0)
+            row["on_map_s"] = (row["on_map_s"] or 0) + (stat.get("on_map_s") or 0)
+            row["distance_ft"] = (row["distance_ft"] or 0) + (stat.get("distance_ft") or 0)
+            if stat.get("paint_pct") is not None:       # weighted by time seen
+                mine = stat.get("seen_s") or 0
+                row["paint_pct"] = round(((row["paint_pct"] or 0) * seen_before + stat["paint_pct"] * mine) / (seen_before + mine)) if (seen_before + mine) else stat["paint_pct"]
+            row["two_places"] = row["two_places"] or bool(stat.get("two_places_frames"))
+            row["tracking_ids"] += stat.get("tracking_ids", [])
+    rows = []
+    for row in folded.values():
+        shots_here = row.pop("shots")
+        rows.append(dict(score_tiles(shots_here), **row))
+    if not with_unmatched:
+        rows = [row for row in rows if not row["unmatched"]]
+    rows.sort(key=lambda row: (row["unmatched"], -row["points"], -(row["seen_s"] or 0), int(row["number"]) if row["number"].isdigit() else 0))
     unnumbered = sum(1 for row in stats.get("players", []) if row.get("team") == label and not row.get("identified"))
     return rows, unnumbered
 
@@ -1119,7 +1221,8 @@ def game_summary(stem):
     season = seasons.get(info["season_id"]) if info["season_id"] else None
     opponent = teams.get(info["opponent_id"]) if info["opponent_id"] else None
     names = roster_for(info["season_id"] or current_season_id())
-    us, us_unnumbered = player_rows(stem, who["our_team"], names) if who["our_team"] else ([], 0)
+    merges = merges_for(info["season_id"] or current_season_id())
+    us, us_unnumbered = player_rows(stem, who["our_team"], names, merges) if who["our_team"] else ([], 0)
     them, them_unnumbered = player_rows(stem, who["their_team"], {}) if who["their_team"] else ([], 0)
     all_shots = shots_of(stem)
     mine = [shot for shot in all_shots if shot.get("team") == who["our_team"]]
@@ -1154,22 +1257,26 @@ def area_shares(marks):
     return {"paint": round(100 * paint / points), "threes": round(100 * threes / points), "free_throws": round(100 * free / points)}
 
 
-def season_players(rows, names):
+def season_players(rows, names, merges=None, with_unmatched=False):
     """Season totals per jersey number over the given game rows (our team): the Players page and the leaders.
 
     Each: {"number", "name", "games" (games the number was seen or shot in), "points", "points_per_game",
-    "field_goals", "threes", "free_throws" ({made, tried, pct}), "seen_s", "distance_ft", "distance_per_game_ft"}.
+    "field_goals", "threes", "free_throws" ({made, tried, pct}), "seen_s", "distance_ft", "distance_per_game_ft",
+    "unmatched" (a number no roster player explains; only with with_unmatched), "read_as"}.
+    merges: the season roster's merges (see player_rows).
     """
     totals = {}
     for row in rows:
         who = sides(row["stem"])
         if not who["our_team"]:
             continue
-        players, _ = player_rows(row["stem"], who["our_team"], names)
+        players, _ = player_rows(row["stem"], who["our_team"], names, merges, with_unmatched)
         for player in players:
             total = totals.setdefault(player["number"], {
                 "number": player["number"], "name": player["name"], "games": 0, "points": 0, "seen_s": 0.0, "distance_ft": 0.0,
-                "field_goals": {"made": 0, "tried": 0}, "threes": {"made": 0, "tried": 0}, "free_throws": {"made": 0, "tried": 0}})
+                "field_goals": {"made": 0, "tried": 0}, "threes": {"made": 0, "tried": 0}, "free_throws": {"made": 0, "tried": 0},
+                "unmatched": player["unmatched"], "read_as": []})
+            total["read_as"] = sorted(set(total["read_as"]) | set(player.get("read_as", [])), key=lambda n: int(n) if n.isdigit() else 0)
             total["games"] += 1
             total["points"] += player["points"]
             total["seen_s"] += player["seen_s"] or 0
@@ -1187,7 +1294,7 @@ def season_players(rows, names):
         total["seen_s"] = round(total["seen_s"], 1)
         total["distance_ft"] = round(total["distance_ft"])
         listed.append(total)
-    listed.sort(key=lambda total: (-total["points"], -total["seen_s"], int(total["number"])))
+    listed.sort(key=lambda total: (total["unmatched"], -total["points"], -total["seen_s"], int(total["number"]) if total["number"].isdigit() else 0))
     return listed
 
 
@@ -1244,7 +1351,7 @@ def season_summary(season_id):
             our_shots += [shot for shot in shots_of(row["stem"]) if shot.get("team") == who["our_team"]]
             marks += marks_of(row["stem"], who["our_team"])
     tiles = score_tiles(our_shots)
-    players = season_players(rows, names)
+    players = season_players(rows, names, season["roster"].get("merges"))
     played = [row for row in schedule if row["points_us"] is not None or row["points_them"] is not None]
     return {"season": season, "games": rows, "games_count": len(rows), "schedule": schedule,
             "record": record_of(schedule),

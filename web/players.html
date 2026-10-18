@@ -17,8 +17,8 @@
   .table-wrap { scrollbar-width: thin; }                             /* and when it still overflows, the scrollbar shows */
   .lines-table { font-size: 14px; }
   .lines-table td { padding: 8px 8px; }
-  .players-table tbody tr { cursor: pointer; }
-  .players-table tbody tr:hover { background: var(--bg); }
+  .players-table tbody tr.unmatched td { color: var(--muted); }
+  .players-table .name-link { font-weight: 700; }
   .player-head { display: flex; align-items: center; gap: 12px; }
   .player-head .lead-number { width: 48px; height: 48px; font-size: 20px; }
   .player-head .name { font-size: 22px; font-weight: 700; }
@@ -35,6 +35,8 @@
       <div class="subtitle">Season totals for every player on the roster: points and shots from the tagged shots, time on camera and distance from the processed games.</div>
     </div>
     <div class="head-side">
+      <a class="btn btn-outline" id="roster-link" href="season.html#roster">Roster</a>
+      <label class="check check-box"><input type="checkbox" id="show-unmatched">Show unmatched numbers</label>
       <label for="season-pick" class="label">Season</label>
       <select id="season-pick" class="season-pick"></select>
     </div>
@@ -42,26 +44,72 @@
 
   <div class="callout" id="provisional-note" hidden>A game in this season had its court marked with stand-in clicks, so the shot maps and distances are provisional until the court is marked by you.</div>
 
-  <div class="two-col">
+  <!-- Edit one player: name, number, squad, or "not a real player" -->
+  <section class="card" id="edit-panel" hidden>
+    <div class="card-head middle">
+      <h2 class="card-title" id="edit-title">Edit player</h2>
+      <button class="btn btn-light btn-sm" id="edit-close" type="button">Close</button>
+    </div>
+    <form id="edit-form" class="stack" style="gap: 14px">
+      <div class="form-grid">
+        <div class="field"><label for="edit-name">Name</label><input id="edit-name" type="text" maxlength="60"></div>
+        <div class="field"><label for="edit-number">Number</label><input id="edit-number" type="text" inputmode="numeric" maxlength="3"></div>
+        <div class="field"><label for="edit-squad">Team</label>
+          <select id="edit-squad" class="input"><option value="both">Both</option><option value="black">Black</option><option value="red">Red</option></select>
+        </div>
+      </div>
+      <label class="check check-box"><input type="checkbox" id="edit-not-real">Not a real player (a misread number): hide this row</label>
+      <div class="field" id="edit-merge-field" hidden><label for="edit-merge">...and count its minutes and points for</label>
+        <select id="edit-merge" class="input"><option value="">nobody (just hide it)</option></select>
+      </div>
+      <div class="row">
+        <button class="btn btn-red" type="submit" id="edit-save">Save</button>
+        <span class="hint">Kept in the season's roster on this laptop. Changing a number keeps the stats read under the old one.</span>
+      </div>
+    </form>
+  </section>
+
+  <div class="two-col two-col-even">
     <section class="card col-main">
       <div class="card-head">
-        <h2 class="card-title" id="players-title">Players</h2>
-        <span class="card-note">Click a player for the shot map and the game lines</span>
+        <h2 class="card-title">Black players</h2>
+        <span class="card-note" id="black-note"></span>
       </div>
       <div class="table-wrap">
         <table class="table players-table">
-          <thead><tr><th>No.</th><th>Player</th><th>Games</th><th>Pts</th><th>Per game</th><th>FG</th><th>3PT</th><th>FT</th><th>On camera</th><th>Distance</th></tr></thead>
-          <tbody id="player-rows"></tbody>
+          <thead><tr><th>No.</th><th>Player</th><th>Games</th><th>Pts</th><th>Per game</th><th>FG</th><th>3PT</th><th>FT</th><th>On camera</th><th>Distance</th><th></th></tr></thead>
+          <tbody id="black-rows"></tbody>
         </table>
       </div>
-      <div class="hint" id="players-note" hidden></div>
-      <div class="hint">"On camera" is the time a player was in the picture, not minutes played: the camera follows the play. Distance is measured while a player is on the court map. Names never leave this laptop.</div>
     </section>
-
-    <section class="card col-side" id="player-panel">
-      <div class="hint">Choose a player in the table.</div>
+    <section class="card col-side">
+      <div class="card-head">
+        <h2 class="card-title">Red players</h2>
+        <span class="card-note" id="red-note"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="table players-table">
+          <thead><tr><th>No.</th><th>Player</th><th>Games</th><th>Pts</th><th>Per game</th><th>FG</th><th>3PT</th><th>FT</th><th>On camera</th><th>Distance</th><th></th></tr></thead>
+          <tbody id="red-rows"></tbody>
+        </table>
+      </div>
     </section>
   </div>
+
+  <section class="card" id="unmatched-card" hidden>
+    <div class="card-head">
+      <h2 class="card-title">Unmatched numbers</h2>
+      <span class="card-note">Numbers the reader saw on our team that no roster player explains. They count for nobody until you say who they are (Edit).</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table players-table">
+        <thead><tr><th>No.</th><th>Read as</th><th>Games</th><th>Pts</th><th>On camera</th><th>Distance</th><th></th></tr></thead>
+        <tbody id="unmatched-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="hint">Click a player's name for the full page: shot map, zones, game by game. "On camera" is the time a player was in the picture, not minutes played: the camera follows the play. Names never leave this laptop.</div>
 </main>
 <script src="app.js"></script>
 <script src="players.js"></script>
