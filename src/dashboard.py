@@ -179,6 +179,18 @@ async def need_the_card(request: Request, call_next):
 
 
 @app.middleware("http")
+async def fresh_pages(request: Request, call_next):
+    """The pages, scripts and styles are never served from the browser's cache without asking first.
+
+    Without this header the browser keeps a copy of a page for a while and shows the old one after the
+    program was updated ("nothing has changed"). Videos and pictures under /files/ keep normal caching."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/files/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.middleware("http")
 async def own_pages_only(request: Request, call_next):
     """Answer this laptop's own browser only, and let only the dashboard's own pages change things.
 
