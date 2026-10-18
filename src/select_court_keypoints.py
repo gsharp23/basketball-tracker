@@ -137,6 +137,16 @@ def draw_diagram(setup, landmarks):
     for name, i in numbers(setup).items():
         x, y = model[name]["court_ft"]
         centre = spot(x, y)
+        # The baseline corners sit right next to where the three-point line meets the baseline on a narrow court,
+        # so their circle is drawn just outside the corner, with a short line to the exact point.
+        if name.endswith("_sideline") and name.startswith(("left_", "right_")):
+            away = 30
+            dx = -away if name.startswith("left_") else away
+            dy = -away if name.endswith("_far_sideline") else away
+            bubble = (centre[0] + dx, centre[1] + dy)
+            cv2.line(diagram, centre, bubble, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.circle(diagram, centre, 5, (0, 0, 0), -1, cv2.LINE_AA)
+            centre = bubble
         cv2.circle(diagram, centre, 16, (0, 170, 0) if name in clicked else (0, 0, 255), -1, cv2.LINE_AA)
         text_size = cv2.getTextSize(str(i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
         cv2.putText(diagram, str(i), (centre[0] - text_size[0] // 2, centre[1] + text_size[1] // 2),
