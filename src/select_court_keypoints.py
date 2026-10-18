@@ -45,7 +45,7 @@ import court_model
 import gyms
 
 DIAGRAM_PX_PER_FT = 10
-DIAGRAM_MARGIN = 50
+DIAGRAM_MARGIN = 64             # room round the court for the corner bubbles and the FAR / NEAR words
 CHECK_TILE = (960, 540)
 
 
