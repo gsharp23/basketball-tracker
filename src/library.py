@@ -31,7 +31,8 @@ The files (all under data/, never in git)
         "season_id" (None = Unassigned), "opponent_id", "opponent" (the name, kept for display), "date",
         "home" (True/False/None), "our_team" (the detected colour group that is us: "<colour>"/None),
         "score_us", "score_them" (the final score as typed; None until typed), "processed_on"
-        ("laptop"/"colab"/None), "conditions": {"gym": "", "light": "good"/"dim"/"", "camera": ""}
+        ("laptop"/"colab"/None), "test_clip" (True for a clip kept for trying the tool: never in any stats,
+        never counted on the Dashboard), "conditions": {"gym": "", "light": "good"/"dim"/"", "camera": ""}
     data/_dashboard/play_types.json
         {"offense": ["Half-court set", ...], "defense": ["Man-to-man", ...]}   editable by the coach
 
@@ -57,7 +58,7 @@ UNASSIGNED = "unassigned"           # the season id of a game that is not in any
 
 # Every key of game_info.json, with its value before the coach types anything.
 INFO_DEFAULTS = {"season_id": None, "opponent_id": None, "opponent": "", "date": "", "home": None, "our_team": None,
-                 "score_us": None, "score_them": None, "processed_on": None,
+                 "score_us": None, "score_them": None, "processed_on": None, "test_clip": False,
                  "conditions": {"gym": "", "light": "", "camera": ""}}
 LIGHTS = ("", "good", "dim")
 PROCESSED_ON = (None, "laptop", "colab")
@@ -587,6 +588,8 @@ def check_info(stem, changes):
         if changes["processed_on"] not in PROCESSED_ON:
             raise Problem("\"Processed on\" is the laptop or Colab.")
         clean["processed_on"] = changes["processed_on"]
+    if "test_clip" in changes:
+        clean["test_clip"] = bool(changes["test_clip"])
     if "conditions" in changes:
         given = changes["conditions"] if isinstance(changes["conditions"], dict) else {}
         conditions = dict(game_info(stem)["conditions"])
@@ -640,10 +643,15 @@ def list_games():
     return games
 
 
-def games_in(season_id=None, team_id=None):
-    """The games of a season (UNASSIGNED for the ones without), or against a team, oldest first."""
+def games_in(season_id=None, team_id=None, include_test=False):
+    """The games of a season (UNASSIGNED for the ones without), or against a team, oldest first.
+
+    Test clips (game_info "test_clip") are left out unless include_test is True: no stats screen or
+    Dashboard count ever sees them; the Games library lists them in their own group."""
     found = []
     for game in list_games():
+        if game["info"]["test_clip"] and not include_test:
+            continue
         if season_id is not None and game["season_id"] != season_id:
             continue
         if team_id is not None and game["info"]["opponent_id"] != team_id:
@@ -1216,7 +1224,8 @@ def season_summary(season_id):
             "record": record_of(schedule),
             "points_per_game": per_game(schedule, "points_us"), "allowed_per_game": per_game(schedule, "points_them"),
             "field_goals": tiles["field_goals"], "threes": tiles["threes"], "free_throws": tiles["free_throws"],
-            "points_by_game": [{"stem": row["stem"], "label": f"vs {row['opponent']}" if row["opponent"] else (row["stem"] or row["date"]),
+            "points_by_game": [{"stem": row["stem"], "fixture_id": row.get("fixture_id"), "opponent": row["opponent"],
+                                "label": f"vs {row['opponent']}" if row["opponent"] else (row["stem"] or row["date"]),
                                 "us": row["points_us"], "them": row["points_them"], "from": row["points_from"],
                                 "date": row["date"]} for row in played],
             "shots": {"count": len(our_shots), "marks": marks,

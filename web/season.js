@@ -61,6 +61,13 @@ function showTiles() {
 
 /* ---- points by game: an inline chart, us in red, the opponents in grey ---- */
 
+function shortLabel(game) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(game.date || '');
+  const when = match ? MONTHS[Number(match[2]) - 1] + ' ' + Number(match[3]) : '';
+  const first = (game.opponent || '').split(/\s+/)[0];
+  return when ? when + ' · ' + first : first;
+}
+
 function pointsChart(games) {
   const SVG = 'http://www.w3.org/2000/svg';
   const played = games.filter(function (game) { return game.us !== null || game.them !== null; });
@@ -107,11 +114,21 @@ function pointsChart(games) {
     // A filled dot is a typed final score; a hollow one is points from the tagged shots, a stand-in.
     add('circle', { cx: x(i), cy: y(game.us), r: 5, fill: game.from === 'scores' ? '#d81e27' : '#ffffff', stroke: '#d81e27', 'stroke-width': 2.5 });
   });
+  // Short labels: the date and the opponent's first word ("Feb 5 · Wilson"); the full name and the score on hover.
+  // A game with no opponent says "Set opponent" and opens its Edit form.
   const every = Math.ceil(played.length / 8);     // with many games, only every n-th label fits
   played.forEach(function (game, i) {
     if (i % every) return;
-    const label = add('text', { x: x(i), y: 205, 'text-anchor': 'middle', 'font-size': 12, fill: '#5a5f6a', 'font-family': 'Barlow, sans-serif' });
-    label.textContent = game.label.length > 16 ? game.label.slice(0, 15) + '…' : game.label;
+    const label = add('text', { x: x(i), y: 205, 'text-anchor': 'middle', 'font-size': 12, fill: game.opponent ? '#5a5f6a' : '#8f1219',
+                                'font-family': 'Barlow, sans-serif', style: game.opponent ? '' : 'cursor: pointer; text-decoration: underline' });
+    label.textContent = game.opponent ? shortLabel(game) : 'Set opponent';
+    const hover = document.createElementNS(SVG, 'title');
+    hover.textContent = (game.opponent ? 'vs ' + game.opponent : 'No opponent set') + ' · ' + fmtDate(game.date) + (game.us !== null ? ' · ' + fmtScore(game.us, game.them) + (game.from === 'tags' ? ' (tagged)' : '') : '');
+    label.appendChild(hover);
+    if (!game.opponent) label.addEventListener('click', function () {
+      const row = summary.schedule.find(function (r) { return (game.stem && r.stem === game.stem) || (game.fixture_id && r.fixture_id === game.fixture_id); });
+      if (row) openFixturePanel(row);
+    });
   });
   return svg;
 }

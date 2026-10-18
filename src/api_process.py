@@ -312,7 +312,8 @@ def game_rows():
     """Every game as a ROW (see the docstring), in the order of api_seasons: newest first within each season."""
     groups = api_seasons.all_games()
     rows = []
-    for group in groups["seasons"] + [{"id": "unassigned", "name": "Not in a season", "current": False, "games": groups["unassigned"]}]:
+    for group in (groups["seasons"] + [{"id": "unassigned", "name": "Not in a season", "current": False, "games": groups["unassigned"]},
+                                       {"id": "test_clips", "name": "Test clips", "current": False, "games": groups["test_clips"]}]):
         for row in group["games"]:
             drive = drive_for(row["stem"])
             steps = steps_of(row, drive)
@@ -320,6 +321,7 @@ def game_rows():
             rows.append(dict(row, title=game_title(row), length_words=facts["length_words"], size_words=facts["size_words"],
                              bytes=facts["bytes"], step=current_step(steps), where=where_words(row, steps, drive),
                              done=current_step(steps) == 6, season_name=group["name"], season_current=group["current"],
+                             test_clip=group["id"] == "test_clips",
                              drive={key: drive.get(key) for key in ("state", "sent", "stale", "connected", "imported", "finished")}))
     return groups, rows
 
@@ -334,11 +336,15 @@ def games():
         raise HTTPException(503, "The data folders cannot be read.")
     by_season = {}
     for row in rows:
-        by_season.setdefault(row["season_id"], []).append(row)
-    listed = [{"id": group["id"], "name": group["name"], "current": group["current"], "games": by_season.get(group["id"], [])}
-              for group in groups["seasons"]]
+        by_season.setdefault("test_clips" if row["test_clip"] else row["season_id"], []).append(row)
+    # The library's group names say what a season is for: the current one is processed for real stats, an
+    # earlier one is footage to train the detector on.
+    listed = [{"id": group["id"], "name": group["name"] + (" · this season" if group["current"] else " · training footage"),
+               "current": group["current"], "games": by_season.get(group["id"], [])} for group in groups["seasons"]]
     if by_season.get("unassigned"):
         listed.append({"id": "unassigned", "name": "Not in a season", "current": False, "games": by_season["unassigned"]})
+    if by_season.get("test_clips"):
+        listed.append({"id": "test_clips", "name": "Test clips", "current": False, "games": by_season["test_clips"]})
     return {"groups": listed, "games_total": len(rows), "seasons_total": len(groups["seasons"]),
             "clips_folder": groups["clips_folder"], "colab_url": drive_link.PROCESS_NOTEBOOK_URL, "busy": groups["busy"]}
 
@@ -401,7 +407,7 @@ def improve_card(counts, games_with_pictures, versions, job):
 
 def process_card(rows):
     """The Dashboard's PROCESS A GAME card: the game closest to done that is not done yet."""
-    todo = [row for row in rows if not row["done"]]
+    todo = [row for row in rows if not row["done"] and not row["test_clip"]]
     if not todo:
         return {"title": "Every game is processed", "status": "Nothing waiting.", "block": {"ok": True, "text": "Nothing is blocking you."},
                 "button": "Add a game video", "href": "games.html#add", "small": "A new video starts at step 1.", "stem": None}
@@ -447,6 +453,7 @@ def overview():
         raise HTTPException(400, str(error))
     except OSError:
         raise HTTPException(503, "The data folders cannot be read.")
+    rows = [row for row in rows if not row["test_clip"]]          # test clips never count
     done = sum(1 for row in rows if row["done"])
     waiting_run_all = sum(1 for row in rows if row["step"] == 4)
     not_started = sum(1 for row in rows if row["step"] <= 2)

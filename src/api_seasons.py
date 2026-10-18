@@ -3,7 +3,8 @@
     GET /api/seasons/library              the Seasons screen: every season with its record, games, points per game,
                                           the trend line and its last game; the recent games table; the Unassigned count
     GET /api/seasons/games                the Games screen: every game grouped by season (current season first, then
-                                          newest), newest game first, the Unassigned games last, each row as below
+                                          newest), newest game first, the Unassigned games last, each row as below;
+                                          test clips in "test_clips" instead of their season
     GET /api/seasons/{id}/summary         the Season screen: library.season_summary() plus what each game row needs
                                           (status words, the action to offer, progress while running, time estimate),
                                           the same on the "schedule" rows (a fixture without a video: "No video"),
@@ -101,8 +102,8 @@ def with_status(row):
     return row
 
 
-def game_rows(season_id):
-    return [with_status(library.game_row(game)) for game in library.games_in(season_id=season_id)]
+def game_rows(season_id, include_test=False):
+    return [with_status(library.game_row(game)) for game in library.games_in(season_id=season_id, include_test=include_test)]
 
 
 # ---------------------------------------------------------------- the Seasons screen
@@ -146,17 +147,21 @@ def seasons_library():
 def all_games():
     """Every game, grouped by season, for the Games screen; each row has the status words and the action."""
     seasons = library.load_seasons()["seasons"]
-    groups = []
+    groups, test_clips = [], []
     for season_id, season in seasons.items():
-        rows = game_rows(season_id)
+        rows = game_rows(season_id, include_test=True)
         rows.reverse()                                                 # newest game first
+        test_clips += [row for row in rows if library.game_info(row["stem"])["test_clip"]]
+        rows = [row for row in rows if not library.game_info(row["stem"])["test_clip"]]
         groups.append({"id": season_id, "name": season["name"], "start": season["start"],
                        "current": season["current"], "games": rows})
     groups.sort(key=lambda group: group["start"], reverse=True)       # newest season first...
     groups.sort(key=lambda group: not group["current"])               # ...and the current season before all
-    unassigned = game_rows(library.UNASSIGNED)
+    unassigned = game_rows(library.UNASSIGNED, include_test=True)
     unassigned.reverse()
-    return {"seasons": groups, "unassigned": unassigned, "clips_folder": main.windows_path(config.CLIPS_DIR),
+    test_clips += [row for row in unassigned if library.game_info(row["stem"])["test_clip"]]
+    unassigned = [row for row in unassigned if not library.game_info(row["stem"])["test_clip"]]
+    return {"seasons": groups, "unassigned": unassigned, "test_clips": test_clips, "clips_folder": main.windows_path(config.CLIPS_DIR),
             "busy": dash_common.what_is_running(), "run_where": dash_common.load_settings()["run_where"],
             "colab_url": drive_link.PROCESS_NOTEBOOK_URL,
             "games_total": sum(len(group["games"]) for group in groups) + len(unassigned)}

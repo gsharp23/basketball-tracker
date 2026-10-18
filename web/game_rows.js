@@ -250,6 +250,7 @@ function fillFormFrom(stem) {
   byId('assign-date').placeholder = info.date_is_guess ? info.date : '';
   byId('assign-us').value = info.score_us === null ? '' : info.score_us;
   byId('assign-them').value = info.score_them === null ? '' : info.score_them;
+  byId('assign-test').checked = !!info.test_clip;
   setHome(info.home);
 }
 
@@ -298,6 +299,7 @@ async function saveAssignment(event) {
       home: GameRows.homeChoice,
       score_us: byId('assign-us').value.trim(),
       score_them: byId('assign-them').value.trim(),
+      test_clip: byId('assign-test').checked,
     });
   });
   button.disabled = false;
