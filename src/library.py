@@ -326,7 +326,8 @@ def clean_team(saved):
     return {"name": str(saved.get("name") or "").strip() or "Team", "short": str(saved.get("short") or "")[:3].upper(),
             "colour": str(saved.get("colour") or TEAM_COLOURS[0]),
             "notes": {str(number): str(text) for number, text in notes.items()},
-            "place": str(saved.get("place") or "")[:120], "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon")),
+            "place": str(saved.get("place") or "")[:120], "address": str(saved.get("address") or "")[:160],
+            "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon")),
             "links": clean_links(saved.get("links")),
             "info": {key: str(info.get(key) or "")[:200] for key in TEAM_INFO_KEYS},
             "roster": {str(number): str(name) for number, name in roster.items()}}
@@ -334,7 +335,8 @@ def clean_team(saved):
 
 def clean_home(saved):
     saved = saved if isinstance(saved, dict) else {}
-    return {"place": str(saved.get("place") or "")[:120], "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon"))}
+    return {"place": str(saved.get("place") or "")[:120], "address": str(saved.get("address") or "")[:160],
+            "lat": clean_number(saved.get("lat")), "lon": clean_number(saved.get("lon"))}
 
 
 def load_teams():
@@ -351,6 +353,8 @@ def set_home_location(changes):
     changes = changes if isinstance(changes, dict) else {}
     if "place" in changes:
         data["home"]["place"] = str(changes["place"] or "").strip()[:120]
+    if "address" in changes:
+        data["home"]["address"] = str(changes["address"] or "").strip()[:160]
     for key in ("lat", "lon"):
         if key in changes:
             data["home"][key] = clean_number(changes[key])
@@ -436,6 +440,8 @@ def update_team(team_id, changes):
                 row["notes"].pop(str(number), None)
     if "place" in changes:
         row["place"] = str(changes["place"] or "").strip()[:120]
+    if "address" in changes:
+        row["address"] = str(changes["address"] or "").strip()[:160]
     for key in ("lat", "lon"):
         if key in changes:
             row[key] = clean_number(changes[key])

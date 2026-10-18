@@ -39,48 +39,84 @@ function switchView(wanted) {
   load();
 }
 
-/* ---- the map: home as a star, each opponent as a dot in its colour ---- */
+/* ---- the map: home as a yellow pin, each opponent's gym as a dark one; a card per pin ---- */
 
 let map = null, markers = null;
+
+function pinIcon(kind) {
+  return L.divIcon({ className: '', html: '<span class="pin ' + kind + '"></span>', iconSize: [18, 18], iconAnchor: [4, 18], popupAnchor: [6, -16] });
+}
+
+// The card a pin opens: school, address, the dates we play them (each a link), the MaxPreps link box.
+function pinCard(c) {
+  const card = el('div', { class: 'map-popup' }, [
+    el('div', { class: 'name' }, c.name),
+    el('div', { class: 'small' }, c.address || c.place || '')]);
+  const dates = el('div', { class: 'dates' });
+  (c.dates || []).forEach(function (d) {
+    const words = fmtDate(d.date) + (d.home === true ? ' · home' : d.home === false ? ' · away' : '') + (d.result ? ' · ' + d.result + ' ' + fmtScore(d.score_us, d.score_them) : '');
+    const href = d.stem ? withParams('game.html', { game: d.stem }) : withParams('season.html', { season: d.season_id });
+    dates.appendChild(el('a', { href: href }, words));
+  });
+  if (!(c.dates || []).length) dates.appendChild(el('span', { class: 'small' }, 'No game against them on the schedule yet.'));
+  card.appendChild(dates);
+  const current = (c.links || []).find(function (link) { return /maxpreps/i.test(link.label) || /maxpreps/i.test(link.url); });
+  const box = el('input', { type: 'url', placeholder: 'Paste their MaxPreps link', value: current ? current.url : '' });
+  const save = el('button', { class: 'btn btn-outline', type: 'button' }, 'Save link');
+  save.addEventListener('click', async function () {
+    const url = box.value.trim();
+    const others = (c.links || []).filter(function (link) { return link !== current; });
+    const links = url ? others.concat([{ label: 'MaxPreps', url: url }]) : others;
+    const saved = await tryToast(function () { return putJSON('/api/teams/' + encodeURIComponent(c.id), { links: links }); });
+    if (saved) { c.links = saved.links; toast(url ? 'MaxPreps link saved for ' + c.name + '.' : 'Link removed.', 'good'); }
+  });
+  card.appendChild(el('div', {}, [el('span', { class: 'small' }, 'MaxPreps link'), box, save,
+    current ? el('a', { href: current.url, target: '_blank', rel: 'noopener', class: 'small', style: 'margin-left: 8px' }, 'open ↗') : null]));
+  card.appendChild(el('div', {}, el('a', { href: withTeam('team.html', c.id) }, 'Open the team →')));
+  return card;
+}
 
 function drawMap(reply) {
   const card = byId('map-card'), note = byId('map-note');
   if (view === 'ours') { card.hidden = true; return; }
   card.hidden = false;
+  const placed = reply.cards.filter(function (c) { return c.lat !== null && c.lon !== null && c.lat !== undefined; });
+  const unplaced = reply.cards.filter(function (c) { return !(c.lat !== null && c.lon !== null && c.lat !== undefined); });
+  const home = reply.home && reply.home.lat !== null ? reply.home : null;
+  // Opponents with no pin: a list under the map.
+  const list = byId('home-only-list');
+  list.replaceChildren.apply(list, unplaced.map(function (c) { return el('a', { href: withTeam('team.html', c.id) }, c.name); }));
+  byId('home-only').hidden = !unplaced.length;
   if (typeof L === 'undefined') {
-    note.textContent = 'The map needs the internet (it could not be loaded).';
+    note.textContent = 'The map needs the internet the first time (it could not be loaded).';
     byId('map').replaceChildren(el('div', { class: 'hint', style: 'padding: 20px' }, 'No map without the internet. The teams are still listed below.'));
     return;
   }
-  const placed = reply.cards.filter(function (c) { return c.lat !== null && c.lon !== null && c.lat !== undefined; });
-  const home = reply.home && reply.home.lat !== null ? reply.home : null;
   if (!map) {
     map = L.map('map', { scrollWheelZoom: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    // Tiles come through the dashboard, which keeps each one it has seen (src/api_map.py), so the map works offline afterwards.
+    L.tileLayer('/api/map/tile/{z}/{x}/{y}.png', { minZoom: 6, maxZoom: 15, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   }
   if (markers) markers.remove();
   markers = L.layerGroup().addTo(map);
   const points = [];
   if (home) {
-    const star = L.marker([home.lat, home.lon], { icon: L.divIcon({ className: '', html: '<span class="home-pin">★</span>', iconSize: [26, 26], iconAnchor: [13, 13] }), title: 'Home' });
-    star.bindPopup('<div class="map-popup"><div class="name">Home</div><div class="small">' + esc(home.place || '') + '</div></div>');
-    star.addTo(markers);
+    const pin = L.marker([home.lat, home.lon], { icon: pinIcon('home'), title: 'Home', zIndexOffset: 1000 });
+    pin.bindPopup(el('div', { class: 'map-popup' }, [el('div', { class: 'name' }, 'Home'), el('div', { class: 'small' }, home.address || home.place || '')]));
+    pin.addTo(markers);
     points.push([home.lat, home.lon]);
   }
   placed.forEach(function (c) {
-    const pin = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: '', html: '<span class="team-pin" style="display:block;background:' + c.colour + '"></span>', iconSize: [16, 16], iconAnchor: [8, 8] }), title: c.name });
-    const versus = c.versus && c.versus.played ? 'We are ' + c.versus.record.text + ' against them' : 'Not played yet';
-    const theirs = c.info && c.info.record ? ' · their record ' + esc(c.info.record) : '';
-    pin.bindPopup('<div class="map-popup"><div class="name">' + esc(c.name) + '</div><div class="small">' + esc(c.place || '') + '</div>' +
-                  '<div>' + versus + theirs + '</div><a href="' + withTeam('team.html', c.id) + '">Open the team →</a></div>');
+    const pin = L.marker([c.lat, c.lon], { icon: pinIcon('away'), title: c.name });
+    pin.bindPopup(function () { return pinCard(c); }, { maxWidth: 320 });
     pin.addTo(markers);
     points.push([c.lat, c.lon]);
   });
   if (points.length) map.fitBounds(points, { padding: [30, 30], maxZoom: 11 });
-  else map.setView([35.8, -78.8], 8);
-  const missing = reply.cards.length - placed.length;
-  note.textContent = placed.length + ' of ' + reply.cards.length + ' on the map' + (missing ? ' · ' + missing + ' without a place yet (open the team and type its town)' : '');
-  setTimeout(function () { map.invalidateSize(); }, 50);
+  else if (home) map.setView([home.lat, home.lon], 10);
+  else map.setView([35.65, -78.5], 9);
+  note.textContent = placed.length + ' of ' + reply.cards.length + ' on the map' + (unplaced.length ? ' · ' + unplaced.length + ' home only' : '');
+  setTimeout(function () { map.invalidateSize(); if (points.length) map.fitBounds(points, { padding: [30, 30], maxZoom: 11 }); }, 80);
 }
 
 /* ---- the cards ---- */

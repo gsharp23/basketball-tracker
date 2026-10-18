@@ -11,10 +11,16 @@
 <style>
   /* this page only: the map and the small team badge on a card */
   #map { height: 440px; border-radius: 10px; background: var(--bg); }
+  .map-popup { min-width: 240px; font-family: Barlow, sans-serif; }
   .map-popup .name { font-weight: 800; font-size: 15px; }
-  .map-popup .small { color: var(--muted); }
-  .home-pin { font-size: 26px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
-  .team-pin { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
+  .map-popup .small { color: var(--muted); font-size: 12px; }
+  .map-popup .dates { margin: 6px 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .map-popup input { width: 100%; min-height: 32px; font-size: 13px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; margin-top: 4px; }
+  .map-popup .btn { min-height: 30px; padding: 0 10px; font-size: 13px; margin-top: 6px; }
+  .pin { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.45); display: block; }
+  .pin.home { background: var(--yellow); border-color: var(--ink); }
+  .pin.away { background: var(--ink); }
+  .leaflet-container { font-family: Barlow, sans-serif; }
   .team-head { display: flex; align-items: center; gap: 12px; }
   .team-badge { width: 44px; height: 44px; border-radius: 10px; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex: none; }
   .team-name { font-weight: 800; font-size: 20px; }
@@ -46,7 +52,16 @@
       <span class="card-note" id="map-note"></span>
     </div>
     <div id="map" role="img" aria-label="A map of the schools we play"></div>
-    <div class="hint">Home is the star. Click a marker to open the team. The map and the places come from OpenStreetMap, the one part of this screen that needs the internet.</div>
+    <div class="row" style="margin-top: 12px; gap: 10px; align-items: center">
+      <a class="btn btn-dark" href="squad.html?squad=black">Black</a>
+      <a class="btn btn-red" href="squad.html?squad=red">Red</a>
+      <span class="hint">Home is the yellow pin, each opponent's gym a dark one. Click a pin for the school, its address, the dates we play them and a place for their MaxPreps link. The map comes from OpenStreetMap; each part is kept on the laptop once it has been seen, so it works offline after that.</span>
+    </div>
+    <div id="home-only" hidden>
+      <div class="label" style="margin-top: 14px">Home only</div>
+      <div class="hint">We only play these at our gym, so there is no pin. Open the team and type its address to add one.</div>
+      <div class="row" id="home-only-list" style="gap: 8px 14px; margin-top: 6px"></div>
+    </div>
   </section>
 
   <div class="grid-cards-small" id="cards"><div class="hint">Reading the teams...</div></div>

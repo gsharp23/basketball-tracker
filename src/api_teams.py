@@ -145,8 +145,10 @@ def opponent_cards(season_id):
             continue                                  # not played this season
         identity = {"id": team_id, "name": team["name"], "short": team["short"], "colour": team["colour"], "link": "team"}
         versus = library.head_to_head(team_id)
-        cards.append(dict(card(identity, rows, "them"), place=team["place"], lat=team["lat"], lon=team["lon"],
-                          links=team["links"], info=team["info"], versus=dict(versus, rows=None)))
+        dates = [{"date": row["date"], "stem": row["stem"], "season_id": row["season_id"], "home": row["home"],
+                  "result": row["result"], "score_us": row["score_us"], "score_them": row["score_them"]} for row in versus["rows"]]
+        cards.append(dict(card(identity, rows, "them"), place=team["place"], address=team.get("address", ""), lat=team["lat"], lon=team["lon"],
+                          links=team["links"], info=team["info"], versus=dict(versus, rows=None), dates=dates))
     return cards
 
 
